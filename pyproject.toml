@@ -10,7 +10,7 @@ zip-safe = false
 [tool.setuptools.packages.find]
 
 where = ["src"]
-namespaces = true
+namespaces = false
 
 [project]
 
@@ -45,7 +45,7 @@ Homepage = "https://pegasus.isi.edu"
 Repository = "https://github.com/pegasus-isi/a4x-pegasus-wms.git"
 Issues = "https://github.com/pegasus-isi/a4x-pegasus-wms/issues"
 Changelog = "https://github.com/pegasus-isi/a4x-pegasus-wms/blob/master/CHANGELOG.md"
-Documentation = "https://readthedocs.org"
+Documentation = "https://a4x-pegasus-wms.readthedocs.io/en/latest/"
 
 [project.entry-points.wms_plugins]
 pegasus = "a4x_pegasus_wms:PegasusWMS"

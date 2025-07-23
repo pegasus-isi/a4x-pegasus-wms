@@ -9,6 +9,15 @@
                                       |___/
 </pre>
 
+<p align="left">
+    <img src="https://img.shields.io/pypi/l/a4x-pegasus-wms.svg?logo=apache&color=blue&label=Licence"/>
+    <img src="https://img.shields.io/pypi/v/a4x-pegasus-wms.svg?label=Latest"/>
+    <img src="https://img.shields.io/pypi/pyversions/a4x-pegasus-wms.svg?logo=python"/>
+    <img src="https://img.shields.io/pypi/dm/a4x-pegasus-wms?logo=pypi&color=green&label=PyPI%20Downloads"/>
+    <img src="https://img.shields.io/badge/Code%20Style-black-blue"/>
+    <img src="https://img.shields.io/github/contributors-anon/pegasus-isi/a4x-pegasus-wms?color=green&label=Contributors"/>
+</p>
+
 # References
 
 - [Pegasus Workflow Management System](https://pegasus.isi.edu)
