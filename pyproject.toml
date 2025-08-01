@@ -58,7 +58,28 @@ tests = [
     "coverage",
     "pytest-cov",
     "pytest-resource-path",
-    "a4x-orchestration",
+    # "a4x-orchestration",
+]
+docs = [
+    "sphinx",
+    "sphinx-book-theme",
+    "sphinx-jsonschema",
+    "sphinx_tabs",
+    "sphinx-click",
+    "myst-parser",
+]
+
+[dependency-groups]
+
+dev = ["ruff", "tox"]
+pre-commit = ["pre-commit"]
+tests = [
+    "pytest",
+    "pytest-mock",
+    "coverage",
+    "pytest-cov",
+    "pytest-resource-path",
+    # "a4x-orchestration",
 ]
 docs = [
     "sphinx",
