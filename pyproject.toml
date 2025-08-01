@@ -50,29 +50,12 @@ Documentation = "https://a4x-pegasus-wms.readthedocs.io/en/latest/"
 [project.entry-points.wms_plugins]
 pegasus = "a4x_pegasus_wms:PegasusWMS"
 
-[project.optional-dependencies]
-
-tests = [
-    "pytest",
-    "pytest-mock",
-    "coverage",
-    "pytest-cov",
-    "pytest-resource-path",
-    # "a4x-orchestration",
-]
-docs = [
-    "sphinx",
-    "sphinx-book-theme",
-    "sphinx-jsonschema",
-    "sphinx_tabs",
-    "sphinx-click",
-    "myst-parser",
-]
-
 [dependency-groups]
 
 dev = ["ruff", "tox"]
 pre-commit = ["pre-commit"]
+typing = ["mypy", "types-PyYAML"]
+gha-update = ["gha-update ; python_full_version >= '3.12'"]
 tests = [
     "pytest",
     "pytest-mock",
@@ -165,3 +148,71 @@ forced-separate = ["a4x_pegasus_wms"]
 markers = ["incremental"]
 
 "resource-path.directory-name-test-resources" = "resources"
+
+
+[tool.uv]
+
+default-groups = ["dev", "pre-commit", "tests", "typing", "docs"]
+
+
+[tool.tox]
+
+env_list = ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+
+[tool.tox.env_run_base]
+
+dependency_groups = ["tests"]
+setenv = { PYTHONPATH = "{toxinidir}/src", PYTHONUNBUFFERED = "yes", PYTHONHASHSEED = "3104488430" }
+commands = [["pytest", "--cov", "src", "--no-cov-on-fail", "{posargs:tests}"]]
+
+[tool.tox.env.lint]
+
+skip_install = true
+commands = [["ruff", "check"], ["ruff", "format", "--diff"]]
+deps = ["ruff"]
+
+[tool.tox.env.docs]
+
+allowlist_externals = ["make"]
+changedir = "docs"
+skip_install = true
+commands = [
+    [
+        "make",
+        "clean",
+    ],
+    [
+        "make",
+        "html",
+        { replace = "posargs", default = [
+        ], extend = true },
+    ],
+]
+dependency_groups = ["docs"]
+
+[tool.tox.env.update-actions]
+
+dependency_groups = ["gha-update"]
+skip_install = true
+commands = [["gha-update"]]
+
+[tool.tox.env.update-pre-commit]
+
+dependency_groups = ["pre-commit"]
+skip_install = true
+commands = [["pre-commit", "autoupdate", "--freeze", "-j4"]]
+
+[tool.tox.env.update-lock]
+
+allowlist_externals = ["uv"]
+no_default_groups = true
+skip_install = true
+commands = [
+    [
+        "uv",
+        "lock",
+        { replace = "posargs", default = [
+            "-U",
+        ], extend = true },
+    ],
+]
