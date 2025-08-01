@@ -169,7 +169,7 @@ commands = [["pytest", "--cov", "src", "--no-cov-on-fail", "{posargs:tests}"]]
 
 skip_install = true
 commands = [["ruff", "check"], ["ruff", "format", "--diff"]]
-deps = ["ruff"]
+dependency_groups = ["dev"]
 
 [tool.tox.env.docs]
 
