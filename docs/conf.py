@@ -13,7 +13,7 @@ from datetime import datetime
 project = "A4X Pegasus WMS"
 copyright = str(datetime.now().year)
 author = "Rajiv Mayani"
-release = "0.1.0a0"
+release = "0.1.0a1"
 repository_url = "https://github.com/pegasus-isi/a4x-pegasus-wms"
 
 # -- General configuration ---------------------------------------------------
