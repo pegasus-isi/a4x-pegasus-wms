@@ -38,7 +38,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["pegasus-wms.api"]
+dependencies = ["pegasus-wms.api", "a4x-orchestration"]
 
 [project.urls]
 
@@ -49,6 +49,7 @@ Changelog = "https://github.com/pegasus-isi/a4x-pegasus-wms/blob/master/CHANGELO
 Documentation = "https://a4x-pegasus-wms.readthedocs.io/en/latest/"
 
 [project.entry-points.wms_plugins]
+
 pegasus = "a4x_pegasus_wms:PegasusWMS"
 
 [dependency-groups]
@@ -63,7 +64,6 @@ tests = [
     "coverage",
     "pytest-cov",
     "pytest-resource-path",
-    # "a4x-orchestration",
 ]
 docs = [
     "sphinx",
