@@ -86,6 +86,7 @@ version_files = [
     "pyproject.toml:version",
     "src/a4x_pegasus_wms/version.txt",
     "docs/conf.py:release",
+    "uv.lock:^version",
 ]
 update_changelog_on_bump = true
 major_version_zero = true
