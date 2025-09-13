@@ -10,7 +10,7 @@
 </pre>
 
 <p align="left">
-    <img src="https://img.shields.io/pypi/l/a4x-pegasus-wms.svg?logo=apache&color=blue&label=Licence"/>
+    <img src="https://img.shields.io/pypi/l/a4x-pegasus-wms.svg?logo=apache&color=blue&label=License"/>
     <img src="https://img.shields.io/pypi/v/a4x-pegasus-wms.svg?label=Latest"/>
     <img src="https://img.shields.io/pypi/pyversions/a4x-pegasus-wms.svg?logo=python"/>
     <img src="https://img.shields.io/pypi/dm/a4x-pegasus-wms?logo=pypi&color=green&label=PyPI%20Downloads"/>
