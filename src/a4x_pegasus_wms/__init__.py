@@ -192,7 +192,7 @@ class PegasusWMS(A4XPlugin):
         wf = self._pegasus_workflow = Workflow(name=a4wf.name)
 
         self._log.debug("Adding sites to Pegasus workflow")
-        site_mapping, site_catalog = self._transform_sites(a4wf)
+        site_catalog = self._transform_sites(a4wf)
         wf.add_site_catalog(site_catalog)
 
         self._log.debug("Adding replicas to Pegasus workflow")
@@ -239,8 +239,7 @@ class PegasusWMS(A4XPlugin):
         for tf in tfs:
             tc.add_transformations(tf)
 
-    def _transform_sites(self, a4wf: A4XWorkflow) -> tuple:
-        site_mapping = {}
+    def _transform_sites(self, a4wf: A4XWorkflow) -> SiteCatalog:
         site_catalog = SiteCatalog()
         for a4x_site in a4wf.sites:
             site_info = self._transform_optional_site_info(a4x_site)
@@ -249,8 +248,7 @@ class PegasusWMS(A4XPlugin):
             for directory in a4x_site.values():
                 self._transform_directory(directory, site)
             site_catalog.add_sites(site)
-            site_mapping[a4x_site] = site
-        return site_mapping, site_catalog
+        return site_catalog
 
     def _transform_directory(self, directory: A4XDirectory, site: Site) -> None:
         # TODO confirm that this is a good default
@@ -321,7 +319,7 @@ class PegasusWMS(A4XPlugin):
 
         return site_info
 
-    def _transform_task(self, task: Task) -> Job:
+    def _transform_task(self, task: Task, file_mapping: dict) -> Job:
         job = Job(task.task_name)
 
         # TODO rework to create a shell script out of the task's commands
