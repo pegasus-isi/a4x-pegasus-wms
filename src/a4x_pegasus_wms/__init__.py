@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from io import TextIO
 
     from a4x.orchestration import Directory as A4XDirectory
+    from a4x.orchestration import File as A4XFile
     from a4x.orchestration import SchedulableWork as A4XSchedulable
     from a4x.orchestration import Task
     from a4x.orchestration import Workflow as A4XWorkflow
@@ -338,16 +339,14 @@ class PegasusWMS(A4XPlugin):
                 **task.add_output_extra_kwargs,
             )
 
-        # TODO Add logic here to handle File objects when needed
-        #      Alternatively, add the logic to 'get_path'
         if task.stdin:
-            job.add_stdin(get_path(task.stdin))
+            job.set_stdin(get_path(task.stdin, file_mapping))
 
         if task.stdout:
-            job.add_stdout(get_path(task.stdout))
+            job.set_stdout(get_path(task.stdout, file_mapping))
 
         if task.stderr:
-            job.add_stderr(get_path(task.stderr))
+            job.set_stderr(get_path(task.stderr, file_mapping))
 
         if task.environment:
             for name, value in task.environment.items():
@@ -410,10 +409,10 @@ class PegasusWMS(A4XPlugin):
         self.plan(self.file_path, **plan_kwargs)
 
 
-def get_path(path: A4XPath | os.PathLike | str) -> str:
+def get_path(path: A4XFile | os.PathLike | str, file_mapping: dict) -> str:
     """Transform a path to a string for use in Pegasus workflow objects."""
-    if isinstance(path, A4XPath):
-        return str(path.path) if path.is_logical else path.path.name
+    if isinstance(path, A4XFile):
+        return file_mapping[path]
 
     if isinstance(path, os.PathLike):
         return str(path)
