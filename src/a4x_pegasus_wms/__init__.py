@@ -328,17 +328,15 @@ class PegasusWMS(A4XPlugin):
                 arg = get_path(arg)
             job.add_args(arg)
 
-        # TODO rework inputs/outputs to use a File -> replica ID dict
-        #      in place of the current logic with 'get_path'
         if task.inputs:
             job.add_inputs(
-                *[get_path(input) for input in task.inputs],
+                *[file_mapping[input] for input in task.inputs],
                 **task.add_input_extra_kwargs,
             )
 
         if task.outputs:
             job.add_outputs(
-                *[get_path(output) for output in task.outputs],
+                *[file_mapping[output] for output in task.outputs],
                 **task.add_output_extra_kwargs,
             )
 
