@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from io import TextIO
 
     from a4x.orchestration import Directory as A4XDirectory
+    from a4x.orchestration import SchedulableWork as A4XSchedulable
     from a4x.orchestration import Task
     from a4x.orchestration import Workflow as A4XWorkflow
 
@@ -322,11 +323,8 @@ class PegasusWMS(A4XPlugin):
     def _transform_task(self, task: Task, file_mapping: dict) -> Job:
         job = Job(task.task_name)
 
-        # TODO rework to create a shell script out of the task's commands
-        for arg in task.args or []:
-            if isinstance(arg, (A4XPath, os.PathLike)):
-                arg = get_path(arg)
-            job.add_args(arg)
+        cmd_script = self._transform_commands(task.commands, file_mapping)
+        # TODO decide how to best write the script out to file
 
         if task.inputs:
             job.add_inputs(
@@ -355,37 +353,39 @@ class PegasusWMS(A4XPlugin):
             for name, value in task.environment.items():
                 job.add_env(name, value)
 
-        # TODO adjust as needed to handle changes to _transform_resources
-        resources = task.jobspec_settings.resources
-        self._transform_resources(job, resources)
+        self._transform_schedulable(job, task)
 
         return job
 
-    def _transform_resources(self, job: Job, resources: dict) -> None:
-        # TODO rework to leverage the SchedulableWork base class from A4X
-        if not resources:
-            return
+    def _transform_commands(self, commands: list, file_mapping: dict) -> str:
+        pass
 
-        if "num_cores" in resources:
-            job.add_pegasus_profile(cores=resources["num_cores"])
-
-        if "num_nodes" in resources:
-            job.add_pegasus_profile(nodes=resources["num_nodes"])
-
-        if "num_task" in resources:
-            job.add_pegasus_profile(cores=resources["num_task"])
-
-        if "gpus_per_node" in resources:
-            job.add_pegasus_profile(gpus=resources["gpus_per_node"])
-
-        if "per_resource_type" in resources:
-            job.add_pegasus_profile(cores=resources["per_resource_type"])
-
-        if "per_resource_task_count" in resources:
-            job.add_pegasus_profile(cores=resources["per_resource_task_count"])
-
-        if "exclusive" in resources:
-            job.add_pegasus_profile(cores=resources["exclusive"])
+    def _transform_schedulable(self, job: Job, schedulable: A4XSchedulable) -> None:
+        resources = schedulable.get_resources()
+        if schedulable.duration is not None:
+            job.add_pegasus_profile(runtime=schedulable.duration)
+        if schedulable.queue is not None:
+            job.add_pegasus_profile(queue=schedulable.queue)
+        if schedulable.project is not None:
+            job.add_pegasus_profile(project=schedulable.project)
+        if resources is not None:
+            per_task_resources = resources.resources_per_slot
+            nodes_not_in_slot = (
+                resources.num_nodes is not None and resources.num_nodes > 0
+            )
+            if nodes_not_in_slot:
+                job.add_pegasus_profile(nodes=resources.num_nodes)
+                job.add_pegasus_profile(
+                    cores=resources.num_procs * per_task_resources.cores
+                )
+                if resources.num_slots_per_node is not None:
+                    job.add_pegaasus_profile(ppn=resources.num_slots_per_node)
+                if per_task_resources.gpus is not None:
+                    job.add_pegasus_profile(
+                        gpus=resources.num_procs * per_task_resources.gpus
+                    )
+            else:
+                job.add_pegasus_profile(nodes=per_task_resources.nodes)
 
     def execute(self, **kwargs: dict) -> None:
         """Run the Pegasus workflow."""
