@@ -9,9 +9,11 @@ import inspect
 import logging
 import os
 from functools import wraps
+from pathlib import Path
+from string import Template
 from typing import TYPE_CHECKING, Callable, TypeVar
 
-from a4x.orchestration import Path as A4XPath
+from a4x.orchestration import File as A4XFile
 from a4x.orchestration import PersistencyType as A4XPersistency
 from a4x.orchestration import Scheduler as A4XScheduler
 from a4x.orchestration import Site as A4XSite
@@ -39,7 +41,6 @@ if TYPE_CHECKING:
     from io import TextIO
 
     from a4x.orchestration import Directory as A4XDirectory
-    from a4x.orchestration import File as A4XFile
     from a4x.orchestration import SchedulableWork as A4XSchedulable
     from a4x.orchestration import Task
     from a4x.orchestration import Workflow as A4XWorkflow
@@ -185,26 +186,45 @@ class PegasusWMS(A4XPlugin):
         """
         self._pegasus_workflow.statistics(**kwargs)  # type: ignore[union-attr]
 
-    def transform(self) -> None:
+    def transform(
+        self,
+        script_out_dir: os.PathLike | str | None = None,
+        exist_ok: bool = True,
+    ) -> None:
         """Transform _summary_.
 
         _extended_summary_
         """
+        if script_out_dir is None:
+            script_out_dir = Path.cwd() / "pegasus_a4x_scripts"
         a4wf = self.a4x_wflow
+        # Create the Pegasus Workflow
         wf = self._pegasus_workflow = Workflow(name=a4wf.name)
 
+        # Call self._transform_sites to create a Pegasus SiteCatalog
         self._log.debug("Adding sites to Pegasus workflow")
         site_catalog = self._transform_sites(a4wf)
+        # Add the SiteCatalog to the Pegasus Workflow
         wf.add_site_catalog(site_catalog)
 
         self._log.debug("Adding replicas to Pegasus workflow")
+        # Create a ReplicaCatalog
         rc = ReplicaCatalog()
+        # Add the ReplicaCatalog to the Workflow
         wf.add_replica_catalog(rc)
+        # The file_mapping dict maps A4X File objects to Pegasus File objects
         file_mapping = {}
+        # Loop over A4X File objects found in the 'inputs' and 'outputs' properties
+        # of every A4X Task in the workflow
         for wf_file in a4wf.tasks_inputs_and_outputs:
             self._log.debug(f"Adding replica {wf_file.path_attr} to Pegasus workflow")
+            # Create the Pegasus File
             pegasus_file = File(str(wf_file.path_attr))
+            # Add an A4X File -> Pegasus File mapping into file_mapping
             file_mapping[wf_file] = pegasus_file
+            # If the A4X File is "resolved" (i.e., File.resolve has previously been
+            # called) and not virtual (i.e., File is associated with a directory on
+            # a Site), add a replica for the Pegasus File
             if (
                 not wf_file.is_virtual
                 and wf_file.is_resolved
@@ -218,102 +238,163 @@ class PegasusWMS(A4XPlugin):
             else:
                 self._log.debug(f"Skipping logical input {wf_file.path_attr}")
 
-        # TODO tweak as needed. Mainly, add support for Sites
+        # Create Pegasus Job and Transformation objects from A4X Task objects
         tfs = set()
 
         for _task in a4wf.graph:
+            # Get the actual A4X Task from the NetworkX graph
             task = a4wf.graph.nodes[_task]["task"]
             self._log.debug(f"Adding task {task.task_name} to Pegasus workflow")
-            job = self._transform_task(task)
+            # Call self._transform_task to create the Pegasus Job and the
+            # Bash script for the task
+            job, job_script_path = self._transform_task(
+                task,
+                script_out_dir=script_out_dir,
+                exist_ok=exist_ok,
+                file_mapping=file_mapping,
+            )
+            # Create the Pegasus Transformation for the Task
+            # Note that we set the site to "local" because we assume the
+            # scripts are mainly available at the submission site (i.e., the
+            # site where the HTCondor daemons for workflow submission are running)
             tf = Transformation(
                 task.task_name,
                 site="local",
-                pfn=task.exe_path.resolve(),
+                pfn=job_script_path.resolve(),
                 is_stageable=True,
-                # arch=Arch.AARCH64,
             )
             tfs.add(tf)
+            # Add the Pegasus Job to the Workflow
             wf.add_jobs(job)
 
         self._log.debug(f"Adding {len(tfs)} transformations to Pegasus workflow")
+        # Add the Pegasus Transformations to a TransformationCatalog and Workflow
         tc = TransformationCatalog()
         wf.add_transformation_catalog(tc)
         for tf in tfs:
             tc.add_transformations(tf)
 
     def _transform_sites(self, a4wf: A4XWorkflow) -> SiteCatalog:
+        """Create a Pegasus SiteCatalog from an A4X Workflow's 'sites' property."""
+        # Create the SiteCatalog
         site_catalog = SiteCatalog()
+        # For each A4X Site, ...
         for a4x_site in a4wf.sites:
+            # Get optional Pegasus Site constructor info
             site_info = self._transform_optional_site_info(a4x_site)
+            # Create the Pegasus Site object
             site = Site(a4x_site.name, **site_info)
+            # Populate profiles for the Pegasus Site using the A4X Site
             self._transform_grid_info(a4x_site, site)
+            # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
                 self._transform_directory(directory, site)
+            # Add the Pegasus Site to the SiteCatalog
             site_catalog.add_sites(site)
         return site_catalog
 
     def _transform_directory(self, directory: A4XDirectory, site: Site) -> None:
+        """Add a Pegasus Directory to a Pegasus Site based on an A4X Directory."""
         # TODO confirm that this is a good default
         dir_type = Directory.LOCAL_STORAGE
         shared_file_system = False
+        # The Pegasus directory type is based on a combination of storage type
+        # (LOCAL vs SHARED) and persistency (PERSISTENT vs SCRATCH)
         if directory.storage_type == A4XStorageType.LOCAL:
+            # If the directory represents persistent storage, set the
+            # Pegasus directory type to LOCAL_STORAGE
             if directory.persistency == A4XPersistency.PERSISTENT:
                 dir_type = Directory.LOCAL_STORAGE
+            # If the directory represents scratch/temporary storage, set the
+            # Pegasus directory type to LOCAL_SCRATCH
             elif directory.persistency == A4XPersistency.SCRATCH:
                 dir_type = Directory.LOCAL_SCRATCH
         elif directory.storage_type == A4XStorageType.SHARED:
+            # Regardless of persistency, set shared_file_system to True
             shared_file_system = True
+            # If the directory represents persistent storage, set the
+            # Pegasus directory type to SHARED_STORAGE
             if directory.persistency == A4XPersistency.PERSISTENT:
                 dir_type = Directory.SHARED_STORAGE
+            # If the directory represents scratch/temporary storage, set the
+            # Pegasus directory type to SHARED_SCRATCH
             elif directory.persistency == A4XPersistency.SCRATCH:
                 dir_type = Directory.SHARED_SCRATCH
+        # Create the Pegasus Directory object based on the A4X Directory object
+        # and add a file server based on the A4X Directory path
         pegasus_directory = Directory(
             dir_type, directory.path, shared_file_system=shared_file_system
         ).add_file_servers(FileServer("file://" + str(directory.path), Operation.ALL))
+        # Add the Pegasus Directory to the Pegasus Site
         site.add_directories(pegasus_directory)
 
     def _transform_grid_info(self, a4x_site: A4XSite, pegasus_site: Site) -> None:
+        """Update the Pegasus Site with scheduler-related info from the A4X Site."""
+        # If the scheduler is Flux, set the Pegasus profile to 'glite' and
+        # set the Condor profile to 'batch flux'
         if a4x_site.scheduler == A4XScheduler.FLUX:
             pegasus_site.add_pegasus_profile(style="glite")
             pegasus_site.add_condor_profile(resource="batch flux")
+        # If the scheduler is Slurm, set the Pegasus profile to 'glite' and
+        # set the Condor profile to 'batch slurm'
         elif a4x_site.scheduler == A4XScheduler.SLURM:
             pegasus_site.add_pegasus_profile(style="glite")
             pegasus_site.add_condor_profile(resource="batch slurm")
+        # If the scheduler is SGE, set the Pegasus profile to 'glite' and
+        # set the Condor profile to 'batch sge'
         elif a4x_site.scheduler == A4XScheduler.SGE:
             pegasus_site.add_pegasus_profile(style="glite")
             pegasus_site.add_condor_profile(resource="batch sge")
+        # If the scheduler is PBS, set the Pegasus profile to 'glite' and
+        # set the Condor profile to 'batch pbs'
         elif a4x_site.scheduler == A4XScheduler.PBS:
             pegasus_site.add_pegasus_profile(style="glite")
             pegasus_site.add_condor_profile(resource="batch pbs")
+        # If the scheduler is LSF, set the Pegasus profile to 'glite' and
+        # set the Condor profile to 'batch lsf'
         elif a4x_site.scheduler == A4XScheduler.LSF:
             pegasus_site.add_pegasus_profile(style="glite")
             pegasus_site.add_condor_profile(resource="batch lsf")
+        # If the scheduler is Condor, set the Pegasus profile to 'condor' and
+        # set the Condor profile to 'vanilla'
         elif a4x_site.scheduler == A4XScheduler.CONDOR:
             pegasus_site.add_pegasus_profile(style="condor")
             pegasus_site.add_condor_profile(universe="vanilla")
+        # If the scheduler is unknown, do nothing
         elif a4x_site.scheduler == A4XScheduler.UNKNOWN:
             pass
+        # If some other value is somehow provided, error out
         else:
             raise ValueError(
                 f"A4X Site {a4x_site.name} has an invalid scheduler {a4x_site.scheduler}"  # noqa: E501
             )
 
     def _transform_optional_site_info(self, a4x_site: A4XSite) -> dict:
+        """Extract optional info for Pegasus Sites from the annotations in an A4X Site."""  # noqa: E501
         site_info = {}
 
+        # If the plugin-specific key is not in the A4X Site's annotations, skip
         if self._a4x_workflow_annotation_key in a4x_site.annotations:
+            # If 'arch' is in the annotations for this plugin, create a Pegasus Arch
+            # object from the value in the annotations
             if "arch" in a4x_site.annotations[self._a4x_workflow_annotation_key]:
                 site_info["arch"] = Arch(
                     a4x_site.annotations[self._a4x_workflow_annotation_key]["arch"]
                 )
+            # If 'os_type' is in the annotations for this plugin, create a Pegasus OS
+            # object from the value in the annotations
             if "os_type" in a4x_site.annotations[self._a4x_workflow_annotation_key]:
                 site_info["arch"] = OS(
                     a4x_site.annotations[self._a4x_workflow_annotation_key]["os_type"]
                 )
+            # If 'os_release' is in the annotations for this plugin,
+            # copy the value as-is
             if "os_release" in a4x_site.annotations[self._a4x_workflow_annotation_key]:
                 site_info["os_release"] = a4x_site.annotations[
                     self._a4x_workflow_annotation_key
                 ]["os_release"]
+            # If 'os_version' is in the annotations for this plugin,
+            # copy the value as-is
             if "os_version" in a4x_site.annotations[self._a4x_workflow_annotation_key]:
                 site_info["os_version"] = a4x_site.annotations[
                     self._a4x_workflow_annotation_key
@@ -321,77 +402,286 @@ class PegasusWMS(A4XPlugin):
 
         return site_info
 
-    def _transform_task(self, task: Task, file_mapping: dict) -> Job:
+    def _transform_task(  # noqa: C901
+        self,
+        task: Task,
+        script_out_dir: os.PathLike | str,
+        exist_ok: bool,
+        file_mapping: dict,
+    ) -> tuple:
+        # Create the Pegasus Job
         job = Job(task.task_name)
 
-        cmd_script = self._transform_commands(task.commands, file_mapping)
-        # TODO decide how to best write the script out to file
+        # If the A4X Task has a site, grab it. Also, set the execution site for the Job
+        # to the site name in 'task.site'. Otherwise, create a default site named
+        # "condorpool" with the CONDOR scheduler.
+        if task.site is not None:
+            job.add_selector_profile(execution_site=task.site.name)
+            task_site = task.site
+        else:
+            # TODO should I set the execution site to "condorpool" here?
+            task_site = A4XSite("condorpool", A4XScheduler.CONDOR)
 
+        # Create mappings of A4X Files in 'task.inputs' and 'task.outputs'
+        # to their indexes in their respective lists.
+        # We do this to avoid repeatedly calling 'list.index()' in
+        # self._transform_commands.
+        input_to_idx = {in_file: i for i, in_file in enumerate(task.inputs)}
+        output_to_idx = {out_file: i for i, out_file in enumerate(task.outputs)}
+
+        # Convert 'script_out_dir' to a pathlib.Path and create the directory
+        script_out_path = Path(script_out_dir).expanduser().resolve()
+        script_out_path.mkdir(parents=True, exist_ok=exist_ok)
+
+        # Convert 'task.commands' into a Bash script for the task
+        cmd_script = self._transform_commands(
+            task.task_name, task.commands, task_site, input_to_idx, output_to_idx
+        )
+        script_out_fname = script_out_path / f"{task.task_name}.sh"
+        # Write the task's Bash script to file
+        with script_out_fname.open("w") as f:
+            f.write(cmd_script)
+
+        # Build arguments for the script from 'task.inputs' and 'task.outputs'
+        job_args = []
+
+        # Define inputs for the Pegasus Job based on the A4X Task's 'inputs' field
+        # Also, add '-i' flags for the script based on 'inputs'
         if task.inputs:
+            job_inputs = []
+            for input_file in task.inputs:
+                job_args.extend(["-i", file_mapping[input_file]])
+                job_inputs.append(file_mapping[input_file])
             job.add_inputs(
-                *[file_mapping[input] for input in task.inputs],
+                *job_inputs,
                 **task.add_input_extra_kwargs,
             )
 
+        # Define outputs for the Pegasus Job based on the A4X Task's 'outputs' field
+        # Also, add '-o' flags for the script based on 'outputs'
         if task.outputs:
+            job_outputs = []
+            for output_file in task.outputs:
+                job_args.extend(["-i", file_mapping[output_file]])
+                job_outputs.append(file_mapping[output_file])
             job.add_outputs(
-                *[file_mapping[output] for output in task.outputs],
+                *job_outputs,
                 **task.add_output_extra_kwargs,
             )
 
+        # Add arguments for the job
+        job.add_args(*job_args)
+
+        # Set stdin for the Pegasus Job based on the A4X Task's 'stdin' field
         if task.stdin:
             job.set_stdin(get_path(task.stdin, file_mapping))
 
+        # Set stdout for the Pegasus Job based on the A4X Task's 'stdout' field
         if task.stdout:
             job.set_stdout(get_path(task.stdout, file_mapping))
 
+        # Set stderr for the Pegasus Job based on the A4X Task's 'stderr' field
         if task.stderr:
             job.set_stderr(get_path(task.stderr, file_mapping))
 
+        # Set environment for the Pegasus Job based on the A4X
+        # Task's 'environment' field
         if task.environment:
             for name, value in task.environment.items():
                 job.add_env(name, value)
 
+        # Update the Pegasus Job with scheduling information from the A4X
+        # Tasks's SchedulableWork parent class
         self._transform_schedulable(job, task)
 
-        return job
+        return job, script_out_fname
 
-    def _transform_commands(self, commands: list, file_mapping: dict) -> str:
-        pass
+    def _transform_commands(
+        self,
+        task_name: str,
+        commands: list,
+        site: A4XSite,
+        input_to_idx: dict,
+        output_to_idx: dict,
+    ) -> str:
+        """Turn a list of A4X Commands into the contents of a Bash script.
+
+        This function will generate task definitions as Bash scripts, using a list of
+        A4X Command objects to define the body of the script. To handle any A4X File
+        objects in the Command objects, this function uses two dictionaries that map
+        File objects to their index in either the Task.inputs or Task.outputs field.
+        """
+        # Create a Template for the Bash script
+        command_script_template = Template(
+            """
+#!/usr/bin/env bash
+
+function usage {
+    echo "Usage: ${task_name}.sh -i <input> ... -o <output> ...
+    echo "Options:"
+    echo "========"
+    echo "  * -i <input>: provides an input filename. Can provide multiple times."
+    echo "                Order should match the inputs provided to the Task/Job."
+    echo "  * -o <output>: provides an output filename. Can provide multiple times."
+    echo "                Order should match the outputs provided to the Task/Job."
+}
+
+inputs=()
+outputs=()
+
+while getopts "i:o:h" opt; do
+    case $opt in
+        i)
+            inputs+=("$$OPTARG")
+            ;;
+        o)
+            outputs+=("$$OPTARG")
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        \?)
+            echo "Invalid option: -$$OPTARG" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+shift $$((OPTIND - 1))
+
+$merged_command_string
+""".strip()  # noqa: W605
+        )
+        # Build a list of strings for each command
+        command_strings = []
+        for cmd in commands:
+            curr_cmd_str = ""
+            if cmd.is_block_command:
+                # If the command is a "block command",
+                # just assign to curr_cmd_str
+                curr_cmd_str = cmd.command_or_exe
+            else:
+                # If the command is not a "block command",
+                # then we need to convert cmd.command_or_exe
+                # and maybe cmd.args into one big string.
+                #
+                # We may also need to add a parallel launcher (e.g., srun)
+                # invocation. We let A4X create the parallel launcher
+                # invocation.
+                curr_cmd_list = cmd.generate_parallel_launch(site)
+                if isinstance(cmd.command_or_exe, A4XFile):
+                    # If command_or_exe is an A4X File object, we assume
+                    # that it is resolved. If it is not, raise an error
+                    file_path = cmd.command_or_exe.path
+                    if file_path is None:
+                        raise RuntimeError(
+                            f"Got an unresolved A4X File: {cmd.command_or_exe.path_attr}"  # noqa: E501
+                        )
+                    curr_cmd_list.append(str(file_path))
+                else:
+                    # If command_or_exe is not an A4X File object, then
+                    # it is a string. So, we just add it as-is.
+                    curr_cmd_list.append(cmd.command_or_exe)
+                # Add the contents of cmd.args to curr_cmd_list
+                for arg in self.args:
+                    if isinstance(arg, A4XFile):
+                        # If the argument is an A4X File, there are 3
+                        # possible options.
+                        #  1. If the File is an input to the task, the generated
+                        #     Bash script should pull the value from the 'inputs' array.
+                        #     We use 'input_to_idx' to determine the index into 'inputs'
+                        #  2. If the File is an output to the task, the generated
+                        #     Bash script should pull the value from the
+                        #     'outputs' array. We use 'output_to_idx' to determine
+                        #     the index into 'outputs'.
+                        #  3. Otherwise, we assume the File is already resolved and
+                        #     just use the path as-is. If that assumption is wrong,
+                        #     raise an error.
+                        if arg in input_to_idx:
+                            curr_cmd_list.append(f'"${{inputs[{input_to_idx[arg]}]}}"')
+                        elif arg in output_to_idx:
+                            curr_cmd_list.append(
+                                f'"${{outputs[{output_to_idx[arg]}]}}"'
+                            )
+                        else:
+                            file_path = arg.path
+                            if file_path is None:
+                                raise RuntimeError(
+                                    "Got an unresolved A4X File that is neither"
+                                    f"input nor output: {arg.path.path_attr}"
+                                )
+                            curr_cmd_list.append(str(file_path))
+                    else:
+                        # If the argument is not an A4X File, just cast the value to str
+                        # and append to curr_cmd_list
+                        curr_cmd_list.append(str(arg))
+                # Merge the contents of curr_cmd_list with spaces to create the full
+                # stringified command to add to the script
+                curr_cmd_str = " ".join([str(cmd_elem) for cmd_elem in curr_cmd_list])
+            # Add the stringified version of the command to command_strings
+            command_strings.append(curr_cmd_str)
+        merged_command_string = "\n".join(command_strings)
+        return command_script_template.substitute(
+            task_name=task_name, merged_command_string=merged_command_string
+        )
 
     def _transform_schedulable(self, job: Job, schedulable: A4XSchedulable) -> None:
+        """Populate a Pegasus Job with information from an A4X SchedulableWork."""
+        # Get the A4X Resources object
         resources = schedulable.get_resources()
+        # If a duration has been specified, set the Job's 'runtime' profile entry
         if schedulable.duration is not None:
             job.add_pegasus_profile(runtime=schedulable.duration)
+        # If a queue has been specified, set the Job's 'queue' profile entry
         if schedulable.queue is not None:
             job.add_pegasus_profile(queue=schedulable.queue)
+        # If a project has been specified, set the Job's 'project' profile entry
         if schedulable.project is not None:
             job.add_pegasus_profile(project=schedulable.project)
+        # Only populate resource information if 'resources' is not None
         if resources is not None:
+            # Get the resources per task/slot
             per_task_resources = resources.resources_per_slot
+            # Check if nodes are specified in the Slot object
             nodes_not_in_slot = (
                 resources.num_nodes is not None and resources.num_nodes > 0
             )
+            # If nodes are NOT specified in the Slot object, ...
             if nodes_not_in_slot:
+                # Set the Job's 'nodes' property using resources
                 job.add_pegasus_profile(nodes=resources.num_nodes)
+                # Set the Job's 'cores' property using resources and per_task_resources
                 job.add_pegasus_profile(
                     cores=resources.num_procs * per_task_resources.cores
                 )
+                # If the number of slots per node is specified, set the Job's
+                # 'ppn' profile entry
                 if resources.num_slots_per_node is not None:
                     job.add_pegaasus_profile(ppn=resources.num_slots_per_node)
+                # If the number of GPUs is specfied in the Slot, set the Job's
+                # 'gpus' profile entry
                 if per_task_resources.gpus is not None:
                     job.add_pegasus_profile(
                         gpus=resources.num_procs * per_task_resources.gpus
                     )
+            # If nodes are specified in the slot object, we should only set the number
+            # of nodes in the Job's profile
             else:
                 job.add_pegasus_profile(nodes=per_task_resources.nodes)
 
-    def execute(self, **kwargs: dict) -> None:
+    def execute(
+        self,
+        script_out_dir: os.PathLike | str | None = None,
+        exist_ok: bool = True,
+        **kwargs: dict,
+    ) -> None:
         """Run the Pegasus workflow."""
         # TODO figure out if it's possible to build a
         #      pegasus Workflow from a config file
         if self._pegasus_workflow is None:
-            self.transform()
+            self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
         self.run(**kwargs)
 
     def create_plugin_settings_for_a4x_config(self) -> dict:
@@ -399,13 +689,17 @@ class PegasusWMS(A4XPlugin):
         return {"config_file_path": self.file_path}
 
     def configure_plugin(
-        self, file_path: str | None = None, **plan_kwargs: dict
+        self,
+        file_path: str | None = None,
+        script_out_dir: os.PathLike | str | None = None,
+        exist_ok: bool = True,
+        **plan_kwargs: dict,
     ) -> None:
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
         # TODO add extra args as needed for self.transform
         self.file_path = file_path
         if self._pegasus_workflow is None:
-            self.transform()
+            self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
         self.plan(self.file_path, **plan_kwargs)
 
 
