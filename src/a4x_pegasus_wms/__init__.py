@@ -25,7 +25,6 @@ from Pegasus.api import (
     Directory,
     File,
     FileServer,
-    # Arch,
     Job,
     Operation,
     Properties,
@@ -114,8 +113,11 @@ class PegasusWMS(A4XPlugin):
         if "JAVA_HOME" in os.environ:
             self._props["env.JAVA_HOME"] = os.environ["JAVA_HOME"]
         self.file_path = None
+        self.script_output_dir = None
         if "config_file_path" in self.plugin_settings:
             self.file_path = self.plugin_settings["config_file_path"]
+        if "script_output_dir" in self.plugin_settings:
+            self.script_output_dir = self.plugin_settings["script_output_dir"]
 
     @classmethod
     def get_default_site(cls) -> A4XSite | None:
@@ -633,7 +635,7 @@ $merged_command_string
         resources = schedulable.get_resources()
         # If a duration has been specified, set the Job's 'runtime' profile entry
         if schedulable.duration is not None:
-            job.add_pegasus_profile(runtime=schedulable.duration)
+            job.add_pegasus_profile(runtime=convert_time(schedulable.duration))
         # If a queue has been specified, set the Job's 'queue' profile entry
         if schedulable.queue is not None:
             job.add_pegasus_profile(queue=schedulable.queue)
@@ -686,7 +688,10 @@ $merged_command_string
 
     def create_plugin_settings_for_a4x_config(self) -> dict:
         """Get the plugin settings dict to be added to the A4X-Orchestration YAML config."""  # noqa: E501
-        return {"config_file_path": self.file_path}
+        return {
+            "config_file_path": self.file_path,
+            "script_output_dir": self.script_output_dir,
+        }
 
     def configure_plugin(
         self,
@@ -698,6 +703,7 @@ $merged_command_string
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
         # TODO add extra args as needed for self.transform
         self.file_path = file_path
+        self.script_output_dir = script_out_dir
         if self._pegasus_workflow is None:
             self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
         self.plan(self.file_path, **plan_kwargs)
@@ -712,3 +718,38 @@ def get_path(path: A4XFile | os.PathLike | str, file_mapping: dict) -> str:
         return str(path)
 
     return path
+
+
+def convert_time(time_val: str | int) -> int:
+    """Convert a time string to seconds.
+
+    Since Pegasus only accepts runtime as a number of seconds, we need to convert
+    string values for time to seconds.
+    """
+    if isinstance(time_val, int):
+        return time_val
+    num_seconds = None
+    if ":" in time_val:
+        time_split = time_val.split(":")
+        if len(time_split) == 2:
+            num_seconds = int(float(time_split[0]) * 60) + int(time_split[1])
+        elif len(time_split) == 3:
+            num_seconds = (
+                int(float(time_split[0]) * 60 * 60)  # Convert hours to seconds
+                + int(float(time_split[1]) * 60)  # Convert minutes to seconds
+                + int(time_split[2])
+            )
+        else:
+            raise ValueError(
+                "If a runtime string from A4X contains a colon, it should either be"
+                "of format 'mm:ss' or 'hh:mm:ss'"
+            )
+    elif time_val.endswith("h"):
+        num_seconds = int(float(time_val[:-1]) * 60 * 60)
+    elif time_val.endswith("m"):
+        num_seconds = int(float(time_val[:-1]) * 60)
+    elif time_val.endswith("s"):
+        num_seconds = int(time_val[:-1])
+    else:
+        num_seconds = int(time_val)
+    return num_seconds

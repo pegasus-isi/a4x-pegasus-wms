@@ -144,6 +144,8 @@ known-first-party = ["a4x_pegasus_wms"]
 known-third-party = ["Pegasus"]
 forced-separate = ["a4x_pegasus_wms"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["D103"]
 
 [tool.pytest.ini_options]
 
