@@ -35,6 +35,7 @@ from Pegasus.api import (
     TransformationCatalog,
     Workflow,
 )
+from Pegasus.client._client import from_env
 
 if TYPE_CHECKING:
     from io import TextIO
@@ -112,26 +113,67 @@ class PegasusWMS(A4XPlugin):
         self._props["pegasus.mode"] = "development"
         if "JAVA_HOME" in os.environ:
             self._props["env.JAVA_HOME"] = os.environ["JAVA_HOME"]
-        self.file_path = None
+        self.workflow_file = None
+        self.properties_file = None
         self.script_output_dir = None
-        if "config_file_path" in self.plugin_settings:
-            self.file_path = self.plugin_settings["config_file_path"]
-        if "script_output_dir" in self.plugin_settings:
-            self.script_output_dir = self.plugin_settings["script_output_dir"]
+        self.pegasus_submit_dir = None
+        if (
+            "workflow_file" in self.plugin_settings
+            and self.plugin_settings["workflow_file"] is not None
+        ):
+            self.workflow_file = Path(self.plugin_settings["workflow_file"])
+        if (
+            "properties_file" in self.plugin_settings
+            and self.plugin_settings["workflow_file"] is not None
+        ):
+            self.properties_file = Path(self.plugin_settings["properties_file"])
+        if (
+            "script_output_dir" in self.plugin_settings
+            and self.plugin_settings["script_output_dir"] is not None
+        ):
+            self.script_output_dir = Path(self.plugin_settings["script_output_dir"])
+        if (
+            "pegasus_submit_dir" in self.plugin_settings
+            and self.plugin_settings["pegasus_submit_dir"] is not None
+        ):
+            self.pegasus_submit_dir = self.plugin_settings["pegasus_submit_dir"]
 
     @classmethod
     def get_default_site(cls) -> A4XSite | None:
         """Returns the default execution site for Pegasus workflows."""
         return None
 
+    @check
+    def write(
+        self,
+        workflow_file: str | os.PathLike | TextIO | None = None,
+        properties_file: str | os.PathLike | TextIO | None = None,
+    ) -> None:
+        """Write Pegasus information to file."""
+        self._props.write(
+            file=str(properties_file)
+            if isinstance(properties_file, os.PathLike)
+            else properties_file
+        )
+        self._pegasus_workflow.write(
+            file=str(workflow_file)
+            if isinstance(workflow_file, os.PathLike)
+            else workflow_file
+        )
+
     @validate_keyword_args(Workflow.plan)
     @check
-    def plan(self, file_path: str | TextIO | None = None, **plan_kwargs: dict) -> None:
+    def plan(
+        self,
+        workflow_file: str | os.PathLike | TextIO | None = None,
+        properties_file: str | os.PathLike | TextIO | None = None,
+        **plan_kwargs: dict,
+    ) -> None:
         """Plan _summary_.
 
         _extended_summary_
         """
-        self._props.write(file=file_path)
+        self.write(workflow_file=workflow_file, properties_file=properties_file)
         self._pegasus_workflow.plan(**plan_kwargs)  # type: ignore[union-attr]
 
     @validate_keyword_args(Workflow.run)
@@ -464,7 +506,7 @@ class PegasusWMS(A4XPlugin):
         if task.outputs:
             job_outputs = []
             for output_file in task.outputs:
-                job_args.extend(["-i", file_mapping[output_file]])
+                job_args.extend(["-o", file_mapping[output_file]])
                 job_outputs.append(file_mapping[output_file])
             job.add_outputs(
                 *job_outputs,
@@ -476,15 +518,24 @@ class PegasusWMS(A4XPlugin):
 
         # Set stdin for the Pegasus Job based on the A4X Task's 'stdin' field
         if task.stdin:
-            job.set_stdin(get_path(task.stdin, file_mapping))
+            if task.stdin in task.inputs:
+                job.stdin = get_path(task.stdin, file_mapping)
+            else:
+                job.set_stdin(get_path(task.stdin, file_mapping))
 
         # Set stdout for the Pegasus Job based on the A4X Task's 'stdout' field
         if task.stdout:
-            job.set_stdout(get_path(task.stdout, file_mapping))
+            if task.stdout in task.outputs:
+                job.stdout = get_path(task.stdout, file_mapping)
+            else:
+                job.set_stdout(get_path(task.stdout, file_mapping))
 
         # Set stderr for the Pegasus Job based on the A4X Task's 'stderr' field
         if task.stderr:
-            job.set_stderr(get_path(task.stderr, file_mapping))
+            if task.stderr in task.outputs:
+                job.stderr = get_path(task.stderr, file_mapping)
+            else:
+                job.set_stderr(get_path(task.stderr, file_mapping))
 
         # Set environment for the Pegasus Job based on the A4X
         # Task's 'environment' field
@@ -675,38 +726,65 @@ $merged_command_string
 
     def execute(
         self,
-        script_out_dir: os.PathLike | str | None = None,
-        exist_ok: bool = True,
+        pegasus_home: str = None,
+        replan: bool = False,
         **kwargs: dict,
     ) -> None:
         """Run the Pegasus workflow."""
-        # TODO figure out if it's possible to build a
-        #      pegasus Workflow from a config file
-        if self._pegasus_workflow is None:
-            self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
-        self.run(**kwargs)
+        if replan:
+            if self._pegasus_workflow is None:
+                raise RuntimeError(
+                    "No Pegasus workflow found. Run 'PegasusWMS.configure' first."  # noqa: E501
+                )
+            self.plan(
+                workflow_file=self.workflow_file,
+                properties_file=self.properties_file,
+                **kwargs,
+            )
+            self.run(**kwargs)
+        else:
+            if self.pegasus_submit_dir is None:
+                raise RuntimeError(
+                    "Cannot execute an unplanned Pegasus workflow. Run 'PegasusWMS.configure' first."  # noqa: E501
+                )
+            pegasus_client = from_env(pegasus_home)
+            pegasus_client.run(self.pegasus_submit_dir)
 
     def create_plugin_settings_for_a4x_config(self) -> dict:
         """Get the plugin settings dict to be added to the A4X-Orchestration YAML config."""  # noqa: E501
         return {
-            "config_file_path": self.file_path,
-            "script_output_dir": self.script_output_dir,
+            "workflow_file": str(self.workflow_file),
+            "properties_file": str(self.properties_file),
+            "script_output_dir": str(self.script_output_dir),
+            "pegasus_submit_dir": self.pegasus_submit_dir,
         }
 
     def configure_plugin(
         self,
-        file_path: str | None = None,
+        workflow_file: str | os.PathLike | None = None,
+        properties_file: str | os.PathLike | None = None,
         script_out_dir: os.PathLike | str | None = None,
         exist_ok: bool = True,
+        _skip_plan: bool = False,
         **plan_kwargs: dict,
     ) -> None:
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
-        # TODO add extra args as needed for self.transform
-        self.file_path = file_path
-        self.script_output_dir = script_out_dir
+        self.workflow_file = Path(workflow_file)
+        self.properties_file = Path(properties_file)
+        self.script_output_dir = Path(script_out_dir)
         if self._pegasus_workflow is None:
             self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
-        self.plan(self.file_path, **plan_kwargs)
+        if not _skip_plan:
+            self.plan(
+                workflow_file=workflow_file,
+                properties_file=properties_file,
+                **plan_kwargs,
+            )
+            if self._pegasus_workflow.braindump is None:
+                raise RuntimeError(
+                    "Cannot get braindump after planning the Pegasus workflow"
+                )
+            self.pegasus_submit_dir = self._pegasus_workflow.braindump.submit_dir
 
 
 def get_path(path: A4XFile | os.PathLike | str, file_mapping: dict) -> str:
