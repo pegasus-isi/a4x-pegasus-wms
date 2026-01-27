@@ -638,7 +638,7 @@ $merged_command_string
                     # it is a string. So, we just add it as-is.
                     curr_cmd_list.append(cmd.command_or_exe)
                 # Add the contents of cmd.args to curr_cmd_list
-                for arg in self.args:
+                for arg in cmd.args:
                     if isinstance(arg, A4XFile):
                         # If the argument is an A4X File, there are 3
                         # possible options.
