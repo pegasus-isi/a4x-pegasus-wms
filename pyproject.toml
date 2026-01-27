@@ -27,7 +27,6 @@ classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -49,7 +48,7 @@ Issues = "https://github.com/pegasus-isi/a4x-pegasus-wms/issues"
 Changelog = "https://github.com/pegasus-isi/a4x-pegasus-wms/blob/master/CHANGELOG.md"
 Documentation = "https://a4x-pegasus-wms.readthedocs.io/en/latest/"
 
-[project.entry-points.wms_plugins]
+[project.entry-points.a4x_wms_plugins]
 
 pegasus = "a4x_pegasus_wms:PegasusWMS"
 
