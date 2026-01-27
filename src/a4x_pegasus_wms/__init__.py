@@ -234,8 +234,8 @@ class PegasusWMS(A4XPlugin):
         self,
         script_out_dir: os.PathLike | str | None = None,
         exist_ok: bool = True,
-        transformation_site_name: str = "local",
         use_pegasus_shared_filesystem: bool = False,
+        set_auxillary_local_if_only_one_site: bool = True,
     ) -> None:
         """Transform _summary_.
 
@@ -249,7 +249,9 @@ class PegasusWMS(A4XPlugin):
 
         # Call self._transform_sites to create a Pegasus SiteCatalog
         self._log.debug("Adding sites to Pegasus workflow")
-        site_catalog = self._transform_sites(a4wf, use_pegasus_shared_filesystem)
+        site_catalog = self._transform_sites(
+            a4wf, use_pegasus_shared_filesystem, set_auxillary_local_if_only_one_site
+        )
         # Add the SiteCatalog to the Pegasus Workflow
         wf.add_site_catalog(site_catalog)
 
@@ -305,7 +307,7 @@ class PegasusWMS(A4XPlugin):
             # site where the HTCondor daemons for workflow submission are running)
             tf = Transformation(
                 task.task_name,
-                site=transformation_site_name,
+                site="local",
                 pfn=job_script_path.resolve(),
                 is_stageable=True,
             )
@@ -321,7 +323,10 @@ class PegasusWMS(A4XPlugin):
             tc.add_transformations(tf)
 
     def _transform_sites(
-        self, a4wf: A4XWorkflow, use_pegasus_shared_filesystem: bool
+        self,
+        a4wf: A4XWorkflow,
+        use_pegasus_shared_filesystem: bool,
+        set_auxillary_local_if_only_one_site: bool,
     ) -> SiteCatalog:
         """Create a Pegasus SiteCatalog from an A4X Workflow's 'sites' property."""
         # Create the SiteCatalog
@@ -331,13 +336,19 @@ class PegasusWMS(A4XPlugin):
             # Get optional Pegasus Site constructor info
             site_info = self._transform_optional_site_info(a4x_site)
             data_configuration = None
+            auxillary_local = None
             if "data_configuration" in site_info:
                 data_configuration = site_info["data_configuration"]
                 del site_info["data_configuration"]
+            if "auxillary_local" in site_info:
+                auxillary_local = site_info["auxillary_local"]
+                del site_info["auxillary_local"]
             # Create the Pegasus Site object
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
-            self._transform_grid_info(a4x_site, site, data_configuration)
+            self._transform_grid_info(
+                a4x_site, site, data_configuration, auxillary_local
+            )
             has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
@@ -348,6 +359,8 @@ class PegasusWMS(A4XPlugin):
                     has_shared_scratch = True
             if not has_shared_scratch:
                 raise ValueError("Pegasus requires a shared scratch directory")
+            if set_auxillary_local_if_only_one_site and len(a4wf.sites) == 1:
+                site.add_pegasus_profile(auxillary_local=True)
             # Add the Pegasus Site to the SiteCatalog
             site_catalog.add_sites(site)
         return site_catalog
@@ -409,7 +422,11 @@ class PegasusWMS(A4XPlugin):
         return dir_type
 
     def _transform_grid_info(
-        self, a4x_site: A4XSite, pegasus_site: Site, data_configuration: str | None
+        self,
+        a4x_site: A4XSite,
+        pegasus_site: Site,
+        data_configuration: str | None,
+        auxillary_local: str | None,
     ) -> None:
         """Update the Pegasus Site with scheduler-related info from the A4X Site."""
         # If the scheduler is Flux, set the Pegasus profile to 'glite' and
@@ -480,6 +497,8 @@ class PegasusWMS(A4XPlugin):
             raise ValueError(
                 f"A4X Site {a4x_site.name} has an invalid scheduler {a4x_site.scheduler}"  # noqa: E501
             )
+        if auxillary_local is not None:
+            pegasus_site.add_pegasus_profile(auxillary_local=auxillary_local)
 
     def _transform_optional_site_info(self, a4x_site: A4XSite) -> dict:
         """Extract optional info for Pegasus Sites from the annotations in an A4X Site."""  # noqa: E501
@@ -840,8 +859,8 @@ $merged_command_string
         properties_file: str | os.PathLike | None = None,
         script_out_dir: os.PathLike | str | None = None,
         exist_ok: bool = True,
-        transformation_site_name: str = "local",
         use_pegasus_shared_filesystem: bool = False,
+        set_auxillary_local_if_only_one_site: bool = True,
         _skip_plan: bool = False,
         **plan_kwargs: dict,
     ) -> None:
@@ -857,8 +876,8 @@ $merged_command_string
             self.transform(
                 script_out_dir=script_out_dir,
                 exist_ok=exist_ok,
-                transformation_site_name=transformation_site_name,
                 use_pegasus_shared_filesystem=use_pegasus_shared_filesystem,
+                set_auxillary_local_if_only_one_site=set_auxillary_local_if_only_one_site,
             )
         if not _skip_plan:
             self.plan(
