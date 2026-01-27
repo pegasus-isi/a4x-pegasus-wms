@@ -388,6 +388,22 @@ class PegasusWMS(A4XPlugin):
             directory.path,
             shared_file_system=shared_file_system and use_pegasus_shared_filesystem,
         ).add_file_servers(FileServer("file://" + str(directory.path), Operation.ALL))
+        # If the directory's annotations include a "file_server_prefix" key under
+        # "pegasus", we will add an extra file server using that prefix
+        if (
+            self._a4x_workflow_annotation_key in directory.annotations
+            and "file_server_prefix"
+            in directory.annotations[self._a4x_workflow_annotation_key]
+        ):
+            pegasus_directory.add_file_servers(
+                FileServer(
+                    directory.annotations[self._a4x_workflow_annotation_key][
+                        "file_server_prefix"
+                    ]
+                    + str(directory.path),
+                    Operation.ALL,
+                )
+            )
         # Add the Pegasus Directory to the Pegasus Site
         site.add_directories(pegasus_directory)
         return dir_type
