@@ -566,7 +566,7 @@ class PegasusWMS(A4XPlugin):
         """
         # Create a Template for the Bash script
         command_script_template = Template(
-            """
+            r"""
 #!/usr/bin/env bash
 
 function usage {
@@ -769,9 +769,13 @@ $merged_command_string
         **plan_kwargs: dict,
     ) -> None:
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
-        self.workflow_file = Path(workflow_file)
-        self.properties_file = Path(properties_file)
-        self.script_output_dir = Path(script_out_dir)
+        self.workflow_file = Path(workflow_file) if workflow_file is not None else None
+        self.properties_file = (
+            Path(properties_file) if properties_file is not None else None
+        )
+        self.script_output_dir = (
+            Path(script_out_dir) if script_out_dir is not None else None
+        )
         if self._pegasus_workflow is None:
             self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
         if not _skip_plan:
