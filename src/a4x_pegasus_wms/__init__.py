@@ -39,6 +39,7 @@ from Pegasus.client._client import from_env
 
 if TYPE_CHECKING:
     from io import TextIO
+    from typing import Literal
 
     from a4x.orchestration import Directory as A4XDirectory
     from a4x.orchestration import SchedulableWork as A4XSchedulable
@@ -234,6 +235,8 @@ class PegasusWMS(A4XPlugin):
         self,
         script_out_dir: os.PathLike | str | None = None,
         exist_ok: bool = True,
+        transformation_site_name: str = "local",
+        use_pegasus_shared_filesystem: bool = False,
     ) -> None:
         """Transform _summary_.
 
@@ -247,7 +250,7 @@ class PegasusWMS(A4XPlugin):
 
         # Call self._transform_sites to create a Pegasus SiteCatalog
         self._log.debug("Adding sites to Pegasus workflow")
-        site_catalog = self._transform_sites(a4wf)
+        site_catalog = self._transform_sites(a4wf, use_pegasus_shared_filesystem)
         # Add the SiteCatalog to the Pegasus Workflow
         wf.add_site_catalog(site_catalog)
 
@@ -303,7 +306,7 @@ class PegasusWMS(A4XPlugin):
             # site where the HTCondor daemons for workflow submission are running)
             tf = Transformation(
                 task.task_name,
-                site="local",
+                site=transformation_site_name,
                 pfn=job_script_path.resolve(),
                 is_stageable=True,
             )
@@ -318,7 +321,9 @@ class PegasusWMS(A4XPlugin):
         for tf in tfs:
             tc.add_transformations(tf)
 
-    def _transform_sites(self, a4wf: A4XWorkflow) -> SiteCatalog:
+    def _transform_sites(
+        self, a4wf: A4XWorkflow, use_pegasus_shared_filesystem: bool
+    ) -> SiteCatalog:
         """Create a Pegasus SiteCatalog from an A4X Workflow's 'sites' property."""
         # Create the SiteCatalog
         site_catalog = SiteCatalog()
@@ -330,14 +335,28 @@ class PegasusWMS(A4XPlugin):
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
             self._transform_grid_info(a4x_site, site)
+            has_shared_storage = False
+            has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
-                self._transform_directory(directory, site)
+                dir_type = self._transform_directory(
+                    directory, site, use_pegasus_shared_filesystem
+                )
+                if dir_type == Directory.SHARED_STORAGE:
+                    has_shared_storage = True
+                elif dir_type == Directory.SHARED_SCRATCH:
+                    has_shared_scratch = True
+            if has_shared_storage and not has_shared_scratch:
+                raise ValueError(
+                    "Pegasus requires a shared scratch directory when using shared storage"  # noqa: E501
+                )
             # Add the Pegasus Site to the SiteCatalog
             site_catalog.add_sites(site)
         return site_catalog
 
-    def _transform_directory(self, directory: A4XDirectory, site: Site) -> None:
+    def _transform_directory(
+        self, directory: A4XDirectory, site: Site, use_pegasus_shared_filesystem: bool
+    ) -> str:
         """Add a Pegasus Directory to a Pegasus Site based on an A4X Directory."""
         # TODO confirm that this is a good default
         dir_type = Directory.LOCAL_STORAGE
@@ -367,10 +386,13 @@ class PegasusWMS(A4XPlugin):
         # Create the Pegasus Directory object based on the A4X Directory object
         # and add a file server based on the A4X Directory path
         pegasus_directory = Directory(
-            dir_type, directory.path, shared_file_system=shared_file_system
+            dir_type,
+            directory.path,
+            shared_file_system=shared_file_system and use_pegasus_shared_filesystem,
         ).add_file_servers(FileServer("file://" + str(directory.path), Operation.ALL))
         # Add the Pegasus Directory to the Pegasus Site
         site.add_directories(pegasus_directory)
+        return dir_type
 
     def _transform_grid_info(self, a4x_site: A4XSite, pegasus_site: Site) -> None:
         """Update the Pegasus Site with scheduler-related info from the A4X Site."""
@@ -765,6 +787,8 @@ $merged_command_string
         properties_file: str | os.PathLike | None = None,
         script_out_dir: os.PathLike | str | None = None,
         exist_ok: bool = True,
+        transformation_site_name: str = "local",
+        use_pegasus_shared_filesystem: bool = False,
         _skip_plan: bool = False,
         **plan_kwargs: dict,
     ) -> None:
@@ -777,7 +801,12 @@ $merged_command_string
             Path(script_out_dir) if script_out_dir is not None else None
         )
         if self._pegasus_workflow is None:
-            self.transform(script_out_dir=script_out_dir, exist_ok=exist_ok)
+            self.transform(
+                script_out_dir=script_out_dir,
+                exist_ok=exist_ok,
+                transformation_site_name=transformation_site_name,
+                use_pegasus_shared_filesystem=use_pegasus_shared_filesystem,
+            )
         if not _skip_plan:
             self.plan(
                 workflow_file=workflow_file,
