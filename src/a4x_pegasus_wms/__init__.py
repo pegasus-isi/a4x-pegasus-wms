@@ -335,21 +335,16 @@ class PegasusWMS(A4XPlugin):
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
             self._transform_grid_info(a4x_site, site)
-            has_shared_storage = False
             has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
                 dir_type = self._transform_directory(
                     directory, site, use_pegasus_shared_filesystem
                 )
-                if dir_type == Directory.SHARED_STORAGE:
-                    has_shared_storage = True
-                elif dir_type == Directory.SHARED_SCRATCH:
+                if dir_type == Directory.SHARED_SCRATCH:
                     has_shared_scratch = True
-            if has_shared_storage and not has_shared_scratch:
-                raise ValueError(
-                    "Pegasus requires a shared scratch directory when using shared storage"  # noqa: E501
-                )
+            if not has_shared_scratch:
+                raise ValueError("Pegasus requires a shared scratch directory")
             # Add the Pegasus Site to the SiteCatalog
             site_catalog.add_sites(site)
         return site_catalog
