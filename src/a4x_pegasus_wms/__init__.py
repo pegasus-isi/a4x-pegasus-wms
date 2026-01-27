@@ -39,7 +39,6 @@ from Pegasus.client._client import from_env
 
 if TYPE_CHECKING:
     from io import TextIO
-    from typing import Literal
 
     from a4x.orchestration import Directory as A4XDirectory
     from a4x.orchestration import SchedulableWork as A4XSchedulable
@@ -331,10 +330,14 @@ class PegasusWMS(A4XPlugin):
         for a4x_site in a4wf.sites:
             # Get optional Pegasus Site constructor info
             site_info = self._transform_optional_site_info(a4x_site)
+            data_configuration = None
+            if "data_configuration" in site_info:
+                data_configuration = site_info["data_configuration"]
+                del site_info["data_configuration"]
             # Create the Pegasus Site object
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
-            self._transform_grid_info(a4x_site, site)
+            self._transform_grid_info(a4x_site, site, data_configuration)
             has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
@@ -389,37 +392,69 @@ class PegasusWMS(A4XPlugin):
         site.add_directories(pegasus_directory)
         return dir_type
 
-    def _transform_grid_info(self, a4x_site: A4XSite, pegasus_site: Site) -> None:
+    def _transform_grid_info(
+        self, a4x_site: A4XSite, pegasus_site: Site, data_configuration: str | None
+    ) -> None:
         """Update the Pegasus Site with scheduler-related info from the A4X Site."""
         # If the scheduler is Flux, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch flux'
         if a4x_site.scheduler == A4XScheduler.FLUX:
-            pegasus_site.add_pegasus_profile(style="glite")
+            pegasus_site.add_pegasus_profile(
+                style="glite",
+                data_configuration="sharedfs"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(grid_resource="batch flux")
         # If the scheduler is Slurm, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch slurm'
         elif a4x_site.scheduler == A4XScheduler.SLURM:
-            pegasus_site.add_pegasus_profile(style="glite")
+            pegasus_site.add_pegasus_profile(
+                style="glite",
+                data_configuration="sharedfs"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(grid_resource="batch slurm")
         # If the scheduler is SGE, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch sge'
         elif a4x_site.scheduler == A4XScheduler.SGE:
-            pegasus_site.add_pegasus_profile(style="glite")
+            pegasus_site.add_pegasus_profile(
+                style="glite",
+                data_configuration="sharedfs"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(grid_resource="batch sge")
         # If the scheduler is PBS, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch pbs'
         elif a4x_site.scheduler == A4XScheduler.PBS:
-            pegasus_site.add_pegasus_profile(style="glite")
+            pegasus_site.add_pegasus_profile(
+                style="glite",
+                data_configuration="sharedfs"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(grid_resource="batch pbs")
         # If the scheduler is LSF, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch lsf'
         elif a4x_site.scheduler == A4XScheduler.LSF:
-            pegasus_site.add_pegasus_profile(style="glite")
+            pegasus_site.add_pegasus_profile(
+                style="glite",
+                data_configuration="sharedfs"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(grid_resource="batch lsf")
         # If the scheduler is Condor, set the Pegasus profile to 'condor' and
         # set the Condor profile to 'vanilla'
         elif a4x_site.scheduler == A4XScheduler.CONDOR:
-            pegasus_site.add_pegasus_profile(style="condor")
+            pegasus_site.add_pegasus_profile(
+                style="condor",
+                data_configuration="condorio"
+                if data_configuration is None
+                else data_configuration,
+            )
             pegasus_site.add_condor_profile(universe="vanilla")
         # If the scheduler is unknown, do nothing
         elif a4x_site.scheduler == A4XScheduler.UNKNOWN:
@@ -460,6 +495,13 @@ class PegasusWMS(A4XPlugin):
                 site_info["os_version"] = a4x_site.annotations[
                     self._a4x_workflow_annotation_key
                 ]["os_version"]
+            if (
+                "data_configuration"
+                in a4x_site.annotations[self._a4x_workflow_annotation_key]
+            ):
+                site_info["data_configuration"] = a4x_site.annotations[
+                    self._a4x_workflow_annotation_key
+                ]["data_configuration"]
 
         return site_info
 
