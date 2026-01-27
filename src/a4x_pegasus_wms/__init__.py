@@ -378,27 +378,27 @@ class PegasusWMS(A4XPlugin):
         # set the Condor profile to 'batch flux'
         if a4x_site.scheduler == A4XScheduler.FLUX:
             pegasus_site.add_pegasus_profile(style="glite")
-            pegasus_site.add_condor_profile(resource="batch flux")
+            pegasus_site.add_condor_profile(grid_resource="batch flux")
         # If the scheduler is Slurm, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch slurm'
         elif a4x_site.scheduler == A4XScheduler.SLURM:
             pegasus_site.add_pegasus_profile(style="glite")
-            pegasus_site.add_condor_profile(resource="batch slurm")
+            pegasus_site.add_condor_profile(grid_resource="batch slurm")
         # If the scheduler is SGE, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch sge'
         elif a4x_site.scheduler == A4XScheduler.SGE:
             pegasus_site.add_pegasus_profile(style="glite")
-            pegasus_site.add_condor_profile(resource="batch sge")
+            pegasus_site.add_condor_profile(grid_resource="batch sge")
         # If the scheduler is PBS, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch pbs'
         elif a4x_site.scheduler == A4XScheduler.PBS:
             pegasus_site.add_pegasus_profile(style="glite")
-            pegasus_site.add_condor_profile(resource="batch pbs")
+            pegasus_site.add_condor_profile(grid_resource="batch pbs")
         # If the scheduler is LSF, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch lsf'
         elif a4x_site.scheduler == A4XScheduler.LSF:
             pegasus_site.add_pegasus_profile(style="glite")
-            pegasus_site.add_condor_profile(resource="batch lsf")
+            pegasus_site.add_condor_profile(grid_resource="batch lsf")
         # If the scheduler is Condor, set the Pegasus profile to 'condor' and
         # set the Condor profile to 'vanilla'
         elif a4x_site.scheduler == A4XScheduler.CONDOR:
