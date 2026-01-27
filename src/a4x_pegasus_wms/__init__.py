@@ -583,7 +583,7 @@ inputs=()
 outputs=()
 
 while getopts "i:o:h" opt; do
-    case $opt in
+    case $$opt in
         i)
             inputs+=("$$OPTARG")
             ;;
