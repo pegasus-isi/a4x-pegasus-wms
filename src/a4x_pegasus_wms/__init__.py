@@ -136,7 +136,7 @@ class PegasusWMS(A4XPlugin):
             "pegasus_submit_dir" in self.plugin_settings
             and self.plugin_settings["pegasus_submit_dir"] is not None
         ):
-            self.pegasus_submit_dir = self.plugin_settings["pegasus_submit_dir"]
+            self.pegasus_submit_dir = Path(self.plugin_settings["pegasus_submit_dir"])
 
     @classmethod
     def get_default_site(cls) -> A4XSite | None:
@@ -847,10 +847,18 @@ $merged_command_string
     def create_plugin_settings_for_a4x_config(self) -> dict:
         """Get the plugin settings dict to be added to the A4X-Orchestration YAML config."""  # noqa: E501
         return {
-            "workflow_file": str(self.workflow_file),
-            "properties_file": str(self.properties_file),
-            "script_output_dir": str(self.script_output_dir),
-            "pegasus_submit_dir": self.pegasus_submit_dir,
+            "workflow_file": str(self.workflow_file)
+            if self.workflow_file is not None
+            else None,
+            "properties_file": str(self.properties_file)
+            if self.properties_file is not None
+            else None,
+            "script_output_dir": str(self.script_output_dir)
+            if self.script_output_dir is not None
+            else None,
+            "pegasus_submit_dir": str(self.pegasus_submit_dir)
+            if self.pegasus_submit_dir is not None
+            else None,
         }
 
     def configure_plugin(
