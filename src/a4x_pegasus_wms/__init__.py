@@ -426,7 +426,7 @@ class PegasusWMS(A4XPlugin):
         a4x_site: A4XSite,
         pegasus_site: Site,
         data_configuration: str | None,
-        auxillary_local: str | None,
+        auxillary_local: bool | None,
     ) -> None:
         """Update the Pegasus Site with scheduler-related info from the A4X Site."""
         # If the scheduler is Flux, set the Pegasus profile to 'glite' and
@@ -542,6 +542,16 @@ class PegasusWMS(A4XPlugin):
                 site_info["data_configuration"] = a4x_site.annotations[
                     self._a4x_workflow_annotation_key
                 ]["data_configuration"]
+            if (
+                "auxillary_local"
+                in a4x_site.annotations[self._a4x_workflow_annotation_key]
+            ):
+                site_info["auxillary_local"] = a4x_site.annotations[
+                    self._a4x_workflow_annotation_key
+                ]["auxillary_local"]
+                assert isinstance(site_info["auxillary_local"]), (
+                    "The 'auxillary_local' annotation must be a boolean"
+                )
 
         return site_info
 
