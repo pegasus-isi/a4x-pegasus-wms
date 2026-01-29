@@ -437,6 +437,7 @@ class PegasusWMS(A4XPlugin):
                 data_configuration="sharedfs"
                 if data_configuration is None
                 else data_configuration,
+                cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch flux")
         # If the scheduler is Slurm, set the Pegasus profile to 'glite' and
@@ -447,6 +448,7 @@ class PegasusWMS(A4XPlugin):
                 data_configuration="sharedfs"
                 if data_configuration is None
                 else data_configuration,
+                cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch slurm")
         # If the scheduler is SGE, set the Pegasus profile to 'glite' and
@@ -457,6 +459,7 @@ class PegasusWMS(A4XPlugin):
                 data_configuration="sharedfs"
                 if data_configuration is None
                 else data_configuration,
+                cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch sge")
         # If the scheduler is PBS, set the Pegasus profile to 'glite' and
@@ -467,6 +470,7 @@ class PegasusWMS(A4XPlugin):
                 data_configuration="sharedfs"
                 if data_configuration is None
                 else data_configuration,
+                cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch pbs")
         # If the scheduler is LSF, set the Pegasus profile to 'glite' and
@@ -477,6 +481,7 @@ class PegasusWMS(A4XPlugin):
                 data_configuration="sharedfs"
                 if data_configuration is None
                 else data_configuration,
+                cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch lsf")
         # If the scheduler is Condor, set the Pegasus profile to 'condor' and
