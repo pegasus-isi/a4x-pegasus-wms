@@ -679,7 +679,7 @@ class PegasusWMS(A4XPlugin):
 #!/usr/bin/env bash
 
 function usage {
-    echo "Usage: ${task_name}.sh -i <input> ... -o <output> ...
+    echo "Usage: ${task_name}.sh -i <input> ... -o <output> ..."
     echo "Options:"
     echo "========"
     echo "  * -i <input>: provides an input filename. Can provide multiple times."
