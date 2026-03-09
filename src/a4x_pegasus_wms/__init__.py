@@ -138,7 +138,10 @@ class PegasusWMS(A4XPlugin):
             and self.plugin_settings["pegasus_submit_dir"] is not None
         ):
             self.pegasus_submit_dir = Path(self.plugin_settings["pegasus_submit_dir"])
-        if "output_sites" in self.plugin_settings and self.plugin_settings["output_sites"] is not None:
+        if (
+            "output_sites" in self.plugin_settings
+            and self.plugin_settings["output_sites"] is not None
+        ):
             self.output_sites = set(self.plugin_settings["output_sites"])
 
     @classmethod
@@ -293,6 +296,8 @@ class PegasusWMS(A4XPlugin):
 
         # Create Pegasus Job and Transformation objects from A4X Task objects
         tfs = set()
+        job_map = {}
+        job_children = {}
 
         for _task in a4wf.graph:
             # Get the actual A4X Task from the NetworkX graph
@@ -319,13 +324,22 @@ class PegasusWMS(A4XPlugin):
             tfs.add(tf)
             # Add the Pegasus Job to the Workflow
             wf.add_jobs(job)
+            job_map[task.task_name] = job
+            job_children[task.task_name] = list(a4wf.graph.successors(task.task_name))
 
         self._log.debug(f"Adding {len(tfs)} transformations to Pegasus workflow")
         # Add the Pegasus Transformations to a TransformationCatalog and Workflow
         tc = TransformationCatalog()
-        wf.add_transformation_catalog(tc)
         for tf in tfs:
             tc.add_transformations(tf)
+        wf.add_transformation_catalog(tc)
+
+        # Add job dependencies to the Workflow
+        for parent_task_name, children_task_names in job_children.items():
+            wf.add_dependency(
+                job=job_map[parent_task_name],
+                children=[job_map[child] for child in children_task_names],
+            )
 
     def _transform_sites(
         self,
@@ -352,9 +366,11 @@ class PegasusWMS(A4XPlugin):
             # Create the Pegasus Site object
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
-            self.output_sites.add(self._transform_grid_info(
-                a4x_site, site, data_configuration, auxillary_local
-            ))
+            self.output_sites.add(
+                self._transform_grid_info(
+                    a4x_site, site, data_configuration, auxillary_local
+                )
+            )
             has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
@@ -887,7 +903,9 @@ $merged_command_string
             "pegasus_submit_dir": str(self.pegasus_submit_dir)
             if self.pegasus_submit_dir is not None
             else None,
-            "output_sites": tuple(self.output_sites) if self.output_sites is not None else None,
+            "output_sites": tuple(self.output_sites)
+            if self.output_sites is not None
+            else None,
         }
 
     def configure_plugin(
