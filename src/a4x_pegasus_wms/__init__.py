@@ -117,6 +117,7 @@ class PegasusWMS(A4XPlugin):
         self.properties_file = None
         self.script_output_dir = None
         self.pegasus_submit_dir = None
+        self.output_sites = None
         if (
             "workflow_file" in self.plugin_settings
             and self.plugin_settings["workflow_file"] is not None
@@ -137,6 +138,8 @@ class PegasusWMS(A4XPlugin):
             and self.plugin_settings["pegasus_submit_dir"] is not None
         ):
             self.pegasus_submit_dir = Path(self.plugin_settings["pegasus_submit_dir"])
+        if "output_sites" in self.plugin_settings and self.plugin_settings["output_sites"] is not None:
+            self.output_sites = set(self.plugin_settings["output_sites"])
 
     @classmethod
     def get_default_site(cls) -> A4XSite | None:
@@ -174,6 +177,8 @@ class PegasusWMS(A4XPlugin):
         _extended_summary_
         """
         self.write(workflow_file=workflow_file, properties_file=properties_file)
+        if self.output_sites is not None:
+            plan_kwargs["output_sites"] = list(self.output_sites)
         self._pegasus_workflow.plan(**plan_kwargs)  # type: ignore[union-attr]
 
     @validate_keyword_args(Workflow.run)
@@ -331,6 +336,7 @@ class PegasusWMS(A4XPlugin):
         """Create a Pegasus SiteCatalog from an A4X Workflow's 'sites' property."""
         # Create the SiteCatalog
         site_catalog = SiteCatalog()
+        self.output_sites = set()
         # For each A4X Site, ...
         for a4x_site in a4wf.sites:
             # Get optional Pegasus Site constructor info
@@ -346,9 +352,9 @@ class PegasusWMS(A4XPlugin):
             # Create the Pegasus Site object
             site = Site(a4x_site.name, **site_info)
             # Populate profiles for the Pegasus Site using the A4X Site
-            self._transform_grid_info(
+            self.output_sites.add(self._transform_grid_info(
                 a4x_site, site, data_configuration, auxillary_local
-            )
+            ))
             has_shared_scratch = False
             # Add all directories associated with the A4X Site
             for directory in a4x_site.values():
@@ -363,6 +369,8 @@ class PegasusWMS(A4XPlugin):
                 site.add_pegasus_profile(auxillary_local=True)
             # Add the Pegasus Site to the SiteCatalog
             site_catalog.add_sites(site)
+        if len(self.output_sites) == 0:
+            self.output_sites = None
         return site_catalog
 
     def _transform_directory(
@@ -427,8 +435,10 @@ class PegasusWMS(A4XPlugin):
         pegasus_site: Site,
         data_configuration: str | None,
         auxillary_local: bool | None,
-    ) -> None:
+    ) -> str:
         """Update the Pegasus Site with scheduler-related info from the A4X Site."""
+        if auxillary_local is not None:
+            pegasus_site.add_pegasus_profile(auxillary_local=auxillary_local)
         # If the scheduler is Flux, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch flux'
         if a4x_site.scheduler == A4XScheduler.FLUX:
@@ -440,9 +450,10 @@ class PegasusWMS(A4XPlugin):
                 cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch flux")
+            return a4x_site.name
         # If the scheduler is Slurm, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch slurm'
-        elif a4x_site.scheduler == A4XScheduler.SLURM:
+        if a4x_site.scheduler == A4XScheduler.SLURM:
             pegasus_site.add_pegasus_profile(
                 style="glite",
                 data_configuration="sharedfs"
@@ -451,9 +462,10 @@ class PegasusWMS(A4XPlugin):
                 cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch slurm")
+            return a4x_site.name
         # If the scheduler is SGE, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch sge'
-        elif a4x_site.scheduler == A4XScheduler.SGE:
+        if a4x_site.scheduler == A4XScheduler.SGE:
             pegasus_site.add_pegasus_profile(
                 style="glite",
                 data_configuration="sharedfs"
@@ -462,9 +474,10 @@ class PegasusWMS(A4XPlugin):
                 cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch sge")
+            return a4x_site.name
         # If the scheduler is PBS, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch pbs'
-        elif a4x_site.scheduler == A4XScheduler.PBS:
+        if a4x_site.scheduler == A4XScheduler.PBS:
             pegasus_site.add_pegasus_profile(
                 style="glite",
                 data_configuration="sharedfs"
@@ -473,9 +486,10 @@ class PegasusWMS(A4XPlugin):
                 cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch pbs")
+            return a4x_site.name
         # If the scheduler is LSF, set the Pegasus profile to 'glite' and
         # set the Condor profile to 'batch lsf'
-        elif a4x_site.scheduler == A4XScheduler.LSF:
+        if a4x_site.scheduler == A4XScheduler.LSF:
             pegasus_site.add_pegasus_profile(
                 style="glite",
                 data_configuration="sharedfs"
@@ -484,9 +498,10 @@ class PegasusWMS(A4XPlugin):
                 cores=1,
             )
             pegasus_site.add_condor_profile(grid_resource="batch lsf")
+            return a4x_site.name
         # If the scheduler is Condor, set the Pegasus profile to 'condor' and
         # set the Condor profile to 'vanilla'
-        elif a4x_site.scheduler == A4XScheduler.CONDOR:
+        if a4x_site.scheduler == A4XScheduler.CONDOR:
             pegasus_site.add_pegasus_profile(
                 style="condor",
                 data_configuration="condorio"
@@ -494,16 +509,14 @@ class PegasusWMS(A4XPlugin):
                 else data_configuration,
             )
             pegasus_site.add_condor_profile(universe="vanilla")
+            return "local"
         # If the scheduler is unknown, do nothing
-        elif a4x_site.scheduler == A4XScheduler.UNKNOWN:
-            pass
+        if a4x_site.scheduler == A4XScheduler.UNKNOWN:
+            return "local"
         # If some other value is somehow provided, error out
-        else:
-            raise ValueError(
-                f"A4X Site {a4x_site.name} has an invalid scheduler {a4x_site.scheduler}"  # noqa: E501
-            )
-        if auxillary_local is not None:
-            pegasus_site.add_pegasus_profile(auxillary_local=auxillary_local)
+        raise ValueError(
+            f"A4X Site {a4x_site.name} has an invalid scheduler {a4x_site.scheduler}"  # noqa: E501
+        )
 
     def _transform_optional_site_info(self, a4x_site: A4XSite) -> dict:
         """Extract optional info for Pegasus Sites from the annotations in an A4X Site."""  # noqa: E501
@@ -821,7 +834,7 @@ $merged_command_string
                 # If the number of slots per node is specified, set the Job's
                 # 'ppn' profile entry
                 if resources.num_slots_per_node is not None:
-                    job.add_pegaasus_profile(ppn=resources.num_slots_per_node)
+                    job.add_pegasus_profile(ppn=resources.num_slots_per_node)
                 # If the number of GPUs is specfied in the Slot, set the Job's
                 # 'gpus' profile entry
                 if per_task_resources.gpus is not None:
@@ -874,6 +887,7 @@ $merged_command_string
             "pegasus_submit_dir": str(self.pegasus_submit_dir)
             if self.pegasus_submit_dir is not None
             else None,
+            "output_sites": tuple(self.output_sites) if self.output_sites is not None else None,
         }
 
     def configure_plugin(
