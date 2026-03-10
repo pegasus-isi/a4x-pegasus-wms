@@ -791,7 +791,7 @@ $merged_command_string
                 # We may also need to add a parallel launcher (e.g., srun)
                 # invocation. We let A4X create the parallel launcher
                 # invocation.
-                curr_cmd_list = cmd.generate_parallel_launch(site)
+                curr_cmd_list = cmd.generate_parallel_launch(site.scheduler)
                 if isinstance(cmd.command_or_exe, A4XFile):
                     # If command_or_exe is an A4X File object, we assume
                     # that it is resolved. If it is not, raise an error
