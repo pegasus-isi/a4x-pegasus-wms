@@ -3,6 +3,8 @@
 _extended_summary_
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -47,6 +49,13 @@ def build_lulesh_workflow_example(
         storage_type=storage_type,
         persistency=persistency,
     )
+    if storage_type != StorageType.SHARED or persistency != PersistencyType.SCRATCH:
+        _ = site.add_directory(
+            "lulesh_shared_scratch",
+            "/tmp/scratch",  # noqa: S108
+            storage_type=StorageType.SHARED,
+            persistency=PersistencyType.SCRATCH,
+        )
     site.annotations["pegasus"] = {
         "arch": "x86_64",
         "os_type": "linux",

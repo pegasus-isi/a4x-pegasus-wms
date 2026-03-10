@@ -450,10 +450,13 @@ class PegasusWMS(A4XPlugin):
                 dir_type = Directory.SHARED_SCRATCH
         # Create the Pegasus Directory object based on the A4X Directory object
         # and add a file server based on the A4X Directory path
+        directory_kwargs = {}
+        if directory.site.scheduler != A4XScheduler.CONDOR:
+            directory_kwargs["shared_file_system"] = (
+                shared_file_system and use_pegasus_shared_filesystem
+            )
         pegasus_directory = Directory(
-            dir_type,
-            directory.path,
-            shared_file_system=shared_file_system and use_pegasus_shared_filesystem,
+            dir_type, directory.path, **directory_kwargs
         ).add_file_servers(FileServer("file://" + str(directory.path), Operation.ALL))
         # If the directory's annotations include a "file_server_prefix" key under
         # "pegasus", we will add an extra file server using that prefix
@@ -579,7 +582,7 @@ class PegasusWMS(A4XPlugin):
             # If 'os_type' is in the annotations for this plugin, create a Pegasus OS
             # object from the value in the annotations
             if "os_type" in a4x_site.annotations[self._a4x_workflow_annotation_key]:
-                site_info["arch"] = OS(
+                site_info["os_type"] = OS(
                     a4x_site.annotations[self._a4x_workflow_annotation_key]["os_type"]
                 )
             # If 'os_release' is in the annotations for this plugin,
@@ -947,6 +950,7 @@ $merged_command_string
         use_pegasus_shared_filesystem: bool = False,
         set_auxillary_local_if_only_one_site: bool = True,
         _skip_plan: bool = False,
+        _write_only: bool = False,
         **plan_kwargs: dict,
     ) -> None:
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
@@ -964,7 +968,7 @@ $merged_command_string
                 use_pegasus_shared_filesystem=use_pegasus_shared_filesystem,
                 set_auxillary_local_if_only_one_site=set_auxillary_local_if_only_one_site,
             )
-        if not _skip_plan:
+        if not _write_only and not _skip_plan:
             self.plan(
                 workflow_file=self.workflow_file,
                 properties_file=self.properties_file,
@@ -975,6 +979,10 @@ $merged_command_string
                     "Cannot get braindump after planning the Pegasus workflow"
                 )
             self.pegasus_submit_dir = self._pegasus_workflow.braindump.submit_dir
+        if _write_only:
+            self.write(
+                workflow_file=self.workflow_file, properties_file=self.properties_file
+            )
 
 
 def get_path(path: A4XFile | os.PathLike | str, file_mapping: dict) -> str:

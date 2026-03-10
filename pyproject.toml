@@ -38,7 +38,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["pegasus-wms.api", "a4x-orchestration"]
+dependencies = ["pegasus-wms.api", "a4x-orchestration~=0.1.0b4"]
 
 [project.urls]
 
@@ -157,6 +157,10 @@ markers = ["incremental"]
 
 default-groups = ["dev", "pre-commit", "tests", "typing", "docs"]
 
+# This is added to support development within the A4X devcontainer
+# Uncomment when needed
+# [tool.uv.sources]
+# a4x-orchestration = { path = "../a4x-orchestration", editable = true }
 
 [tool.tox]
 
