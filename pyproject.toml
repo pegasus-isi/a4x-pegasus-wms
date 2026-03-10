@@ -38,7 +38,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["pegasus-wms.api", "a4x-orchestration~=0.1.0b4"]
+dependencies = ["pegasus-wms.api", "a4x-orchestration~=0.1.0b5"]
 
 [project.urls]
 
