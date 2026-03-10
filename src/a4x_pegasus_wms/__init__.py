@@ -80,11 +80,30 @@ def validate_keyword_args(reference_func: Callable[..., T]) -> Callable[..., T]:
             if i == 0 and name in ("self", "cls"):
                 continue
             valid_kwargs.add(name)
+        wrapped_func_signature = inspect.signature(func)
 
         @wraps(func)
         def wrapper(*args: tuple, **kwargs: dict) -> T:  # noqa: ANN401
-            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_kwargs}
-            return func(*args, **filtered_kwargs)
+            # Get the names of keyword arguments explicitly defined by
+            # the wrapped plugin method
+            wrapped_func_params = set(wrapped_func_signature.parameters.keys())
+            # Get the key-value pairs for kwargs defined explicitly by the
+            # wrapped plugin method
+            wrapped_func_kwargs = {
+                k: v for k, v in kwargs.items() if k in wrapped_func_params
+            }
+            # Assume all kwargs not explicitly defined by the wrapped plugin
+            # method to be kwargs from the Pegasus API
+            pegasus_kwargs = {
+                k: v for k, v in kwargs.items() if k not in wrapped_func_params
+            }
+            # Filter Pegasus API kwargs based on the inspected Pegasus API signature
+            filtered_kwargs = {
+                k: v for k, v in pegasus_kwargs.items() if k in valid_kwargs
+            }
+            # Invoke the function with positional args and non-Pegasus kwargs
+            # passed as-is and with the filtered kwargs
+            return func(*args, **wrapped_func_kwargs, **filtered_kwargs)
 
         return wrapper
 
@@ -270,9 +289,9 @@ class PegasusWMS(A4XPlugin):
         wf.add_replica_catalog(rc)
         # The file_mapping dict maps A4X File objects to Pegasus File objects
         file_mapping = {}
-        # Loop over A4X File objects found in the 'inputs' and 'outputs' properties
+        # Loop over A4X File objects found in the 'inputs' property
         # of every A4X Task in the workflow
-        for wf_file in a4wf.task_inputs_and_outputs:
+        for wf_file in a4wf.all_task_inputs:
             self._log.debug(f"Adding replica {wf_file.path_attr} to Pegasus workflow")
             # Create the Pegasus File
             pegasus_file = File(str(wf_file.path_attr))
@@ -293,6 +312,17 @@ class PegasusWMS(A4XPlugin):
                 )
             else:
                 self._log.debug(f"Skipping logical input {wf_file.path_attr}")
+
+        # Loop over A4X File objects in the `outputs` property of every A4X Task
+        # in the workflow
+        for wf_file in a4wf.all_task_outputs:
+            self._log.debug(
+                f"Adding non-replica output file {wf_file.path_attr} to Pegasus workflow"  # noqa: E501
+            )
+            # Create the Pegasus File and add it to 'file_mapping' if needed
+            if wf_file not in file_mapping:
+                pegasus_file = File(str(wf_file.path_attr))
+                file_mapping[wf_file] = pegasus_file
 
         # Create Pegasus Job and Transformation objects from A4X Task objects
         tfs = set()
@@ -936,8 +966,8 @@ $merged_command_string
             )
         if not _skip_plan:
             self.plan(
-                workflow_file=workflow_file,
-                properties_file=properties_file,
+                workflow_file=self.workflow_file,
+                properties_file=self.properties_file,
                 **plan_kwargs,
             )
             if self._pegasus_workflow.braindump is None:
