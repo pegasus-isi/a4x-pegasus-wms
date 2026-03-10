@@ -886,7 +886,7 @@ $merged_command_string
                     "Cannot execute an unplanned Pegasus workflow. Run 'PegasusWMS.configure' first."  # noqa: E501
                 )
             pegasus_client = from_env(pegasus_home)
-            pegasus_client.run(self.pegasus_submit_dir)
+            pegasus_client.run(str(self.pegasus_submit_dir))
 
     def create_plugin_settings_for_a4x_config(self) -> dict:
         """Get the plugin settings dict to be added to the A4X-Orchestration YAML config."""  # noqa: E501
