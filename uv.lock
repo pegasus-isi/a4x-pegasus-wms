@@ -42,7 +42,7 @@ wheels = [
 
 [[package]]
 name = "a4x-pegasus-wms"
-version = "0.1.0a1"
+version = "0.1.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "a4x-orchestration" },
