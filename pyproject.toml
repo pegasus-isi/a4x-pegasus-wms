@@ -20,14 +20,17 @@ authors = [{ name = "Rajiv Mayani", email = "mayani@isi.edu" }]
 maintainers = [{ name = "Rajiv Mayani", email = "mayani@isi.edu" }]
 description = "Pegasus WMS plugin for the A4X Orchestrator"
 readme = { file = "README.md", content-type = "text/markdown" }
-license = "Apache-2.0"
-license-files = ["LICENSE.md"]
-requires-python = ">=3.7"
+license = { text = "Apache-2.0" }
+# TODO Uncomment and replace the `license` field above when Python <= 3.8 support
+# is dropped since no version of setuptools that is compatible with Python <= 3.8
+# also supports PEP 639 (which defines the fields below).
+# license = "Apache-2.0"
+# license-files = ["LICENSE.md"]
+requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -39,7 +42,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["pegasus-wms.api", "a4x-orchestration"]
+dependencies = ["pegasus-wms.api", "a4x-orchestration~=0.1.0b5"]
 
 [project.urls]
 
@@ -49,7 +52,7 @@ Issues = "https://github.com/pegasus-isi/a4x-pegasus-wms/issues"
 Changelog = "https://github.com/pegasus-isi/a4x-pegasus-wms/blob/master/CHANGELOG.md"
 Documentation = "https://a4x-pegasus-wms.readthedocs.io/en/latest/"
 
-[project.entry-points.wms_plugins]
+[project.entry-points.a4x_wms_plugins]
 
 pegasus = "a4x_pegasus_wms:PegasusWMS"
 
@@ -128,7 +131,7 @@ extend-select = [
     "I",   # isort
     "UP",  # pyupgrade
 ]
-ignore = ["S101"]
+ignore = ["S101", "ANN003"]
 
 [tool.ruff.lint.pydocstyle]
 
@@ -144,6 +147,8 @@ known-first-party = ["a4x_pegasus_wms"]
 known-third-party = ["Pegasus"]
 forced-separate = ["a4x_pegasus_wms"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["D103"]
 
 [tool.pytest.ini_options]
 
@@ -156,10 +161,16 @@ markers = ["incremental"]
 
 default-groups = ["dev", "pre-commit", "tests", "typing", "docs"]
 
+# This assumes that local development is being done in the
+# A4X devcontainer. If not using the devcontainer, either comment
+# this table out, or update the entries in this table to point
+# to where you want to get these packages from
+# [tool.uv.sources]
+# a4x-orchestration = { path = "/home/vscode/a4x-vscode-dev/a4x-orchestration" }
 
 [tool.tox]
 
-env_list = ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+env_list = ["py38", "py39", "py310", "py311", "py312", "py313"]
 
 [tool.tox.env_run_base]
 
