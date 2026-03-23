@@ -20,8 +20,12 @@ authors = [{ name = "Rajiv Mayani", email = "mayani@isi.edu" }]
 maintainers = [{ name = "Rajiv Mayani", email = "mayani@isi.edu" }]
 description = "Pegasus WMS plugin for the A4X Orchestrator"
 readme = { file = "README.md", content-type = "text/markdown" }
-license = "Apache-2.0"
-license-files = ["LICENSE.md"]
+license = { text = "Apache-2.0" }
+# TODO Uncomment and replace the `license` field above when Python <= 3.8 support
+# is dropped since no version of setuptools that is compatible with Python <= 3.8
+# also supports PEP 639 (which defines the fields below).
+# license = "Apache-2.0"
+# license-files = ["LICENSE.md"]
 requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 1 - Planning",
@@ -162,11 +166,11 @@ default-groups = ["dev", "pre-commit", "tests", "typing", "docs"]
 # this table out, or update the entries in this table to point
 # to where you want to get these packages from
 [tool.uv.sources]
-a4x-orchestration = { workspace = true }
+a4x-orchestration = { path = "/home/vscode/a4x-vscode-dev/a4x-orchestration" }
 
 [tool.tox]
 
-env_list = ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+env_list = ["py38", "py39", "py310", "py311", "py312", "py313"]
 
 [tool.tox.env_run_base]
 
