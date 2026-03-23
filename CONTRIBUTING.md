@@ -24,5 +24,5 @@ pre-commit install
 pip3 install tox
 
 # Unit tests
-tox -e py37
+tox -e py38
 ```
