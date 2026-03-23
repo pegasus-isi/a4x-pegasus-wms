@@ -21,11 +21,6 @@ maintainers = [{ name = "Rajiv Mayani", email = "mayani@isi.edu" }]
 description = "Pegasus WMS plugin for the A4X Orchestrator"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "Apache-2.0" }
-# TODO Uncomment and replace the `license` field above when Python <= 3.8 support
-# is dropped since no version of setuptools that is compatible with Python <= 3.8
-# also supports PEP 639 (which defines the fields below).
-# license = "Apache-2.0"
-# license-files = ["LICENSE.md"]
 requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 1 - Planning",
