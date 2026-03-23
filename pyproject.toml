@@ -131,7 +131,7 @@ extend-select = [
     "I",   # isort
     "UP",  # pyupgrade
 ]
-ignore = ["S101"]
+ignore = ["S101", "ANN003"]
 
 [tool.ruff.lint.pydocstyle]
 

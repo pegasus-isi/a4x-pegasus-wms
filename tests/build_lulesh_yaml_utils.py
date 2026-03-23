@@ -90,7 +90,7 @@ def build_lulesh_yml(
 ) -> dict:
     dir_shared_fs, dir_type = _get_pegasus_dir_type(sched, storage_type, persistency)
     pegasus_profile, condor_profile = _get_grid_info(sched)
-    base_yml = {
+    base_yml: dict[str, Any] = {
         "name": f"lulesh_workflow_{str(sched)}_{str(storage_type)}_{str(persistency)}",
         "siteCatalog": {
             "sites": [

@@ -6,6 +6,7 @@ _extended_summary_
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Callable
 
 import pytest
 from a4x.orchestration import PersistencyType, Scheduler, StorageType, Workflow
@@ -29,7 +30,7 @@ def test_check() -> None:
 
 
 def _handle_lulesh_workflow_tests(
-    a4x_workflow: Workflow, scheduler: str, expected_config_builder: callable
+    a4x_workflow: Workflow, scheduler: str, expected_config_builder: Callable
 ) -> None:
     a4x_workflow.resolve()
     pegasus_plugin = PegasusWMS(a4x_workflow)

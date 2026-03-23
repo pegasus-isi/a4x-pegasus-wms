@@ -38,7 +38,7 @@ from Pegasus.api import (
 from Pegasus.client._client import from_env
 
 if TYPE_CHECKING:
-    from io import TextIO
+    from typing import TextIO
 
     from a4x.orchestration import Directory as A4XDirectory
     from a4x.orchestration import SchedulableWork as A4XSchedulable
@@ -60,7 +60,7 @@ def check(func: Callable[..., T]) -> Callable[..., T]:
     """
 
     @wraps(func)
-    def wrapper(self: PegasusWMS, *args: tuple, **kwargs: dict) -> T:
+    def wrapper(self: PegasusWMS, *args: tuple, **kwargs) -> T:
         if self._pegasus_workflow is None:
             raise ValueError("Pegasus workflow not initialized")
 
@@ -69,10 +69,12 @@ def check(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-def validate_keyword_args(reference_func: Callable[..., T]) -> Callable[..., T]:
+def validate_keyword_args(
+    reference_func: Callable[..., T],
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Validates keyword arguments based on the signature of a reference function."""
 
-    def decorator(func: callable) -> T:
+    def decorator(func: Callable) -> Callable[..., T]:
         signature = inspect.signature(reference_func)
         valid_kwargs = set()
         for i, (name, _) in enumerate(signature.parameters.items()):
@@ -83,7 +85,7 @@ def validate_keyword_args(reference_func: Callable[..., T]) -> Callable[..., T]:
         wrapped_func_signature = inspect.signature(func)
 
         @wraps(func)
-        def wrapper(*args: tuple, **kwargs: dict) -> T:  # noqa: ANN401
+        def wrapper(*args: tuple, **kwargs) -> T:  # noqa: ANN401
             # Get the names of keyword arguments explicitly defined by
             # the wrapped plugin method
             wrapped_func_params = set(wrapped_func_signature.parameters.keys())
@@ -175,6 +177,10 @@ class PegasusWMS(A4XPlugin):
         properties_file: str | os.PathLike | TextIO | None = None,
     ) -> None:
         """Write Pegasus information to file."""
+        if self._props is None or self._pegasus_workflow is None:
+            raise RuntimeError(
+                "Cannot write a workflow that has not yet been configured!"
+            )
         self._props.write(
             file=str(properties_file)
             if isinstance(properties_file, os.PathLike)
@@ -192,7 +198,7 @@ class PegasusWMS(A4XPlugin):
         self,
         workflow_file: str | os.PathLike | TextIO | None = None,
         properties_file: str | os.PathLike | TextIO | None = None,
-        **plan_kwargs: dict,
+        **plan_kwargs,
     ) -> None:
         """Plan _summary_.
 
@@ -205,7 +211,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.run)
     @check
-    def run(self, **kwargs: dict) -> None:
+    def run(self, **kwargs) -> None:
         """Run _summary_.
 
         _extended_summary_
@@ -214,7 +220,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.status)
     @check
-    def status(self, **kwargs: dict) -> dict | None:
+    def status(self, **kwargs) -> dict | None:
         """Status _summary_.
 
         _extended_summary_
@@ -223,7 +229,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.wait)
     @check
-    def wait(self, **kwargs: dict) -> None:
+    def wait(self, **kwargs) -> None:
         """Wait _summary_.
 
         _extended_summary_
@@ -232,7 +238,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.remove)
     @check
-    def remove(self, **kwargs: dict) -> None:
+    def remove(self, **kwargs) -> None:
         """Remove _summary_.
 
         _extended_summary_
@@ -241,7 +247,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.analyze)
     @check
-    def analyze(self, **kwargs: dict) -> None:
+    def analyze(self, **kwargs) -> None:
         """Analyze _summary_.
 
         _extended_summary_
@@ -250,7 +256,7 @@ class PegasusWMS(A4XPlugin):
 
     @validate_keyword_args(Workflow.statistics)
     @check
-    def statistics(self, **kwargs: dict) -> None:
+    def statistics(self, **kwargs) -> None:
         """Statistics _summary_.
 
         _extended_summary_
@@ -611,7 +617,7 @@ class PegasusWMS(A4XPlugin):
                 site_info["auxillary_local"] = a4x_site.annotations[
                     self._a4x_workflow_annotation_key
                 ]["auxillary_local"]
-                assert isinstance(site_info["auxillary_local"]), (
+                assert isinstance(site_info["auxillary_local"], bool), (
                     "The 'auxillary_local' annotation must be a boolean"
                 )
 
@@ -897,9 +903,9 @@ $merged_command_string
 
     def execute(
         self,
-        pegasus_home: str = None,
+        pegasus_home: str | None = None,
         replan: bool = False,
-        **kwargs: dict,
+        **kwargs,
     ) -> None:
         """Run the Pegasus workflow."""
         if replan:
@@ -951,7 +957,7 @@ $merged_command_string
         set_auxillary_local_if_only_one_site: bool = True,
         _skip_plan: bool = False,
         _write_only: bool = False,
-        **plan_kwargs: dict,
+        **plan_kwargs,
     ) -> None:
         """Execute Pegasus-specific code needed for the :code:`a4x.orchestration.plugin.Plugin` to configure the workflow."""  # noqa: E501
         self.workflow_file = Path(workflow_file) if workflow_file is not None else None
@@ -968,6 +974,9 @@ $merged_command_string
                 use_pegasus_shared_filesystem=use_pegasus_shared_filesystem,
                 set_auxillary_local_if_only_one_site=set_auxillary_local_if_only_one_site,
             )
+        assert self._pegasus_workflow is not None, (
+            "INTERNAL ERROR: Pegasus workflow is not defined after transform"
+        )
         if not _write_only and not _skip_plan:
             self.plan(
                 workflow_file=self.workflow_file,
